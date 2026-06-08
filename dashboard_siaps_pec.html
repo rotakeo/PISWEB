@@ -1,0 +1,2710 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Indicadores USF - Monitor de GAP Assistencial</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Pyodide -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen pb-12">
+
+  <!-- Tela de Carregamento Inicial -->
+  <div id="loader-screen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center transition-all duration-500">
+    <div class="relative flex flex-col items-center max-w-md text-center p-6">
+      <div class="w-16 h-16 border-4 border-t-indigo-600 border-r-blue-600 border-b-slate-200 border-l-slate-200 rounded-full animate-spin mb-6"></div>
+      <h2 class="text-xl font-bold text-slate-900 mb-2 tracking-tight">Iniciando Motor Analítico Python</h2>
+      <p id="loader-status" class="text-xs text-slate-500 font-mono">Baixando WebAssembly do Pyodide...</p>
+      
+      <div class="mt-8 bg-slate-50 border border-slate-200 rounded-xl p-4 text-left w-full">
+        <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1.5">Arquitetura de Cálculo</h4>
+        <p class="text-xs text-slate-600">Auditoria das regras clínicas processada diretamente no navegador via <strong>Python 3 runtime</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // Ícones
+    const Trash2 = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6" /></svg>;
+    const Target = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>;
+    const Terminal = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>;
+    const Users = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+    const Upload = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>;
+    const ShieldAlert = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>;
+    const ArrowUpCircle = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>;
+    const Search = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>;
+    const Activity = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>;
+    const Clock = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+    const Code = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>;
+    const Wallet = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2" /><line x1="12" y1="4" x2="12" y2="20" /></svg>;
+    const FileText = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>;
+    const BookOpen = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
+    const Zap = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>;
+    const UserMinus = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="23" y1="11" x2="17" y2="11" /></svg>;
+    const Camera = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+    const Microscope = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></svg>;
+
+    // Configurações Globais
+    const CORE_INDICATORS = ['C2', 'C3', 'C4', 'C5', 'C6', 'C7'];
+    const BUCKETS = ['SIAPS', 'W1', 'W2', 'W3', 'W4'];
+
+    const VISIT_ITEMS_MAP = { C2: ['D'], C3: ['E', 'J'], C4: ['D'], C5: ['D'], C6: ['C'] };
+
+    const PYTHON_CALCULATOR_CODE = `
+import json
+from datetime import datetime, timedelta
+
+METODOLOGIA = {
+    "C2": { 
+        "nome": "CUIDADO NO DESENVOLVIMENTO INFANTIL", 
+        "items": { 
+            "A": {"desc": "1ª consulta presencial (médico/enf) até 30º dia", "pts": 20}, 
+            "B": {"desc": "09 consultas presenciais/remotas (médico/enf) até 2 anos", "pts": 20},
+            "C": {"desc": "09 registros simultâneos peso/altura até 2 anos", "pts": 20},
+            "D": {"desc": "02 visitas domiciliares ACS (1ª até 30d, 2ª até 6m)", "pts": 20},
+            "E": {"desc": "Vacinas completas (Penta, VIP, Tríplice, Pneumo, etc)", "pts": 20}
+        } 
+    },
+    "C3": { 
+        "nome": "CUIDADO NA GESTAÇÃO E PUERPÉRIO", 
+        "items": { 
+            "A": {"desc": "1ª consulta até 12ª semana de gestação", "pts": 10}, 
+            "B": {"desc": "07 consultas durante a gestação", "pts": 9},
+            "C": {"desc": "07 registros aferição de PA na gestação", "pts": 9},
+            "D": {"desc": "07 registros simultâneos peso/altura na gestação", "pts": 9},
+            "E": {"desc": "03 visitas ACS após a 1ª consulta de pré-natal", "pts": 9},
+            "F": {"desc": "Vacina dTpa a partir da 20ª semana", "pts": 9},
+            "G": {"desc": "Testes rápidos Sífilis, HIV, Hep B/C no 1º trimestre", "pts": 9},
+            "H": {"desc": "Testes rápidos Sífilis e HIV no 3º trimestre", "pts": 9},
+            "I": {"desc": "01 consulta no puerpério", "pts": 9},
+            "J": {"desc": "01 visita ACS durante o puerpério", "pts": 9},
+            "K": {"desc": "01 atividade odontológica na gestação", "pts": 9}
+        } 
+    },
+    "C4": { 
+        "nome": "CUIDADO DA PESSOA COM DIABETES", 
+        "items": { 
+            "A": {"desc": "01 consulta presencial (últimos 6 meses)", "pts": 20}, 
+            "B": {"desc": "01 registro de PA (últimos 6 meses)", "pts": 15}, 
+            "C": {"desc": "01 registro de peso e altura (últimos 12 meses)", "pts": 15}, 
+            "D": {"desc": "02 visitas ACS (intervalo mín. 30 dias nos últ. 12 meses)", "pts": 20}, 
+            "E": {"desc": "Hemoglobina Glicada solicitada/avaliada (últimos 12 meses)", "pts": 15}, 
+            "F": {"desc": "Avaliação dos pés (últimos 12 meses)", "pts": 15} 
+        } 
+    },
+    "C5": { 
+        "nome": "CUIDADO DA PESSOA COM HIPERTENSÃO", 
+        "items": { 
+            "A": {"desc": "01 consulta presencial (últimos 6 meses)", "pts": 25}, 
+            "B": {"desc": "01 registro de PA (últimos 6 meses)", "pts": 25}, 
+            "C": {"desc": "01 registro simultâneo peso e altura (últimos 12 meses)", "pts": 25}, 
+            "D": {"desc": "02 visitas ACS (intervalo mín. 30 dias nos últ. 12 meses)", "pts": 25} 
+        } 
+    },
+    "C6": { 
+        "nome": "CUIDADO DA PESSOA IDOSA", 
+        "items": { 
+            "A": {"desc": "01 consulta presencial (últimos 12 meses)", "pts": 25}, 
+            "B": {"desc": "01 registro simultâneo peso e altura (últimos 12 meses)", "pts": 25}, 
+            "C": {"desc": "02 visitas ACS (intervalo mín. 30 dias nos últ. 12 meses)", "pts": 25}, 
+            "D": {"desc": "01 vacina Influenza (últimos 12 meses)", "pts": 25} 
+        } 
+    },
+    "C7": {
+        "nome": "CUIDADO DA MULHER NA PREVENÇÃO DO CÂNCER",
+        "items": {
+            "A": {"desc": "Exame de rastreamento câncer do colo do útero (últ. 36m)", "pts": 20},
+            "B": {"desc": "Vacina HPV p/ meninas de 09 a 14 anos", "pts": 30},
+            "C": {"desc": "Atendimento saúde sexual e reprodutiva (últ. 12m)", "pts": 30},
+            "D": {"desc": "Exame rastreamento câncer de mama (50 a 69 anos, últ. 24m)", "pts": 20}
+        }
+    }
+}
+
+BASELINE_DATE_STR = "2026-05-20"
+baseline_dt = datetime.strptime(BASELINE_DATE_STR, "%Y-%m-%d")
+
+def fast_parse_date(d_str):
+    try:
+        y, m, d = int(d_str[0:4]), int(d_str[5:7]), int(d_str[8:10])
+        return datetime(y, m, d)
+    except Exception:
+        return None
+
+def get_days_remaining(last_date_str, validity_days):
+    if not last_date_str or last_date_str in ["Sem registro", "-", ""]:
+        return {"status": "expired", "days": 0, "label": "Inexistente"}
+    
+    last_date = fast_parse_date(last_date_str)
+    if not last_date:
+        return {"status": "expired", "days": 0, "label": "Erro na Data"}
+        
+    diff_days = (baseline_dt - last_date).days
+    remaining = validity_days - diff_days
+    
+    if remaining <= 0:
+        return {"status": "expired", "days": remaining, "label": f"Expirado ({abs(remaining)}d)"}
+    if remaining <= 30:
+        return {"status": "expiring", "days": remaining, "label": f"Vence em {remaining}d"}
+    return {"status": "valid", "days": remaining, "label": f"Vigente ({remaining}d)"}
+
+def get_next_best_date_str(last_visit_str):
+    last_dt = fast_parse_date(last_visit_str)
+    if not last_dt:
+        return "Imediato (Sem registro recente)"
+    ideal_date = last_dt + timedelta(days=30)
+    return ideal_date.strftime("%d/%m/%Y")
+
+def calculate_interval_audit(p):
+    alt_vis = p.get("ultimaVisitaACS", "Sem registro")
+    penult_vis = p.get("penultimaVisitaACS", "Sem registro")
+    
+    d1 = fast_parse_date(alt_vis)
+    d2 = fast_parse_date(penult_vis)
+    
+    if not d1 or not d2:
+        return {"valido": True, "redundante": False, "msg": "Aguardando registros domiciliares."}
+        
+    diff_days = abs((d1 - d2).days)
+    if diff_days < 30:
+        next_date = get_next_best_date_str(alt_vis)
+        return {
+            "valido": True,
+            "redundante": True,
+            "msg": f"Trabalho Redundante: Visita efetuada com apenas {diff_days} dias de diferença.",
+            "proxima_visita_ideal": next_date
+        }
+    return {"valido": True, "redundante": False, "msg": "Intervalo de visitas inalterado (OK)."}
+
+def is_patient_nearing_deadline(p):
+    has_expiring = False
+    execs = p.get("dataExecucoes", {})
+    validity_map = {"consulta": 180, "pa": 180, "antropo": 365, "hemo": 365}
+    if execs:
+        for key, date_str in execs.items():
+            if date_str and key in validity_map:
+                rem = get_days_remaining(date_str, validity_map[key])
+                if rem["status"] == "expiring":
+                    has_expiring = True
+    alt_vis = p.get("ultimaVisitaACS", "Sem registro")
+    if alt_vis and alt_vis not in ["Sem registro", "-"]:
+        rem_vis = get_days_remaining(alt_vis, 365)
+        if rem_vis["status"] == "expiring":
+            has_expiring = True
+    return has_expiring
+
+def patient_needs_and_lacks_visit(p, pec_bucket):
+    inds = p.get("indicadores", [])
+    visit_keys_map = {"C2": ["D"], "C3": ["E", "J"], "C4": ["D"], "C5": ["D"], "C6": ["C"]}
+    visit_inds = [ind for ind in inds if ind in visit_keys_map]
+    
+    if not visit_inds: return False
+    let_vis = p.get("ultimaVisitaACS", "Sem registro")
+    if let_vis and let_vis not in ["Sem registro", "-", ""]: return False
+        
+    for ind in visit_inds:
+        keys = visit_keys_map[ind]
+        bp_siaps = p.get("bp", {}).get("SIAPS", {}).get(ind, {})
+        bp_pec = p.get("bp", {}).get(pec_bucket, {}).get(ind, {})
+        for key in keys:
+            if bp_siaps.get(key, False) or bp_pec.get(key, False):
+                return False 
+    return True
+
+def calculate_score(patient, indicator, bucket):
+    meta = METODOLOGIA.get(indicator)
+    if not meta: return None
+    if indicator not in patient.get("indicadores", []): return None
+        
+    bp_bucket = patient.get("bp", {}).get(bucket, {})
+    if indicator not in bp_bucket:
+        return None
+        
+    bp_data = bp_bucket.get(indicator, {})
+    score = 0
+    max_possible = 0
+    
+    for key, item in meta["items"].items():
+        is_checked = bp_data.get(key, False)
+        
+        # Ignora itens sinalizados como N/A para não rebaixar a nota geral do paciente (Isenção)
+        if is_checked == "NA":
+            continue
+            
+        max_possible += item["pts"]
+        if is_checked is True:
+            score += item["pts"]
+            
+    if max_possible == 0: 
+        return None # Caso paciente seja isento 100% de todo o indicador
+        
+    final_score = (score / max_possible) * 100
+    return min(int(final_score), 100)
+
+def get_recommendations(patient, indicator, bucket):
+    meta = METODOLOGIA.get(indicator)
+    if not meta: return None
+    if indicator not in patient.get("indicadores", []): return None
+        
+    bp_bucket = patient.get("bp", {}).get(bucket, {})
+    if indicator not in bp_bucket and indicator not in patient.get("bp", {}).get("SIAPS", {}):
+        return None
+        
+    bp_siaps = patient.get("bp", {}).get("SIAPS", {}).get(indicator, {})
+    bp_pec = bp_bucket.get(indicator, {})
+    acs_audit = calculate_interval_audit(patient)
+    
+    gains, losses, maintained, pending = [], [], [], []
+    
+    item_expiry_map = {
+        "C4": {"A": ("consulta", 180), "B": ("pa", 180), "C": ("antropo", 365), "E": ("hemo", 365), "D": ("ultimaVisitaACS", 365)},
+        "C5": {"A": ("consulta", 180), "B": ("pa", 180), "C": ("antropo", 365), "D": ("ultimaVisitaACS", 365)},
+        "C6": {"A": ("consulta", 365), "B": ("antropo", 365), "C": ("ultimaVisitaACS", 365)},
+        "C7": {"A": ("exameColo", 1095)}
+    }
+    
+    for key, item in meta["items"].items():
+        siaps_checked = bp_siaps.get(key, False)
+        pec_checked = bp_pec.get(key, False)
+        
+        # Ignora da auditoria e cobrança caso os motores PEC ou SIAPS confirmem isenção "NA"
+        if pec_checked == "NA" or siaps_checked == "NA":
+            continue
+            
+        is_acs_visit_key = ((indicator == 'C4' and key == 'D') or (indicator == 'C5' and key == 'D') or (indicator == 'C6' and key == 'C'))
+        is_redundant_visit = is_acs_visit_key and acs_audit.get("redundante", False)
+        
+        pts, desc = item["pts"], item["desc"]
+        warning_msg = None
+        map_info = item_expiry_map.get(indicator, {}).get(key)
+        
+        if map_info and (pec_checked or siaps_checked):
+            field, validity = map_info
+            date_val = patient.get("ultimaVisitaACS") if field == "ultimaVisitaACS" else patient.get("dataExecucoes", {}).get(field)
+            if date_val and date_val not in ["Sem registro", "-", ""]:
+                rem = get_days_remaining(date_val, validity)
+                if rem["status"] == "expiring":
+                    warning_msg = f"Prazo clínico vencerá em breve (Restam apenas {rem['days']} dias)."
+
+        if is_redundant_visit:
+            next_ideal_dt = acs_audit.get("proxima_visita_ideal", "N/D")
+            pending.append({"item": key, "desc": desc, "pts": pts, "warning": f"Trabalho Redundante: Visite a partir de {next_ideal_dt} para pontuar validamente."})
+            continue
+
+        if pec_checked and not siaps_checked:
+            gains.append({"item": key, "desc": desc, "pts": pts, "reason": "Novo requisito faturado com sucesso no PEC.", "warning": warning_msg})
+        elif not pec_checked and siaps_checked:
+            losses.append({"item": key, "desc": desc, "pts": pts, "reason": "Requisito expirou ou não consta novo faturamento no PEC.", "is_glosa": False})
+        elif pec_checked and siaps_checked:
+            rec_next_visit_msg = None
+            if is_acs_visit_key:
+                next_ideal_dt = get_next_best_date_str(patient.get("ultimaVisitaACS"))
+                rec_next_visit_msg = f"Próxima visita recomendada a partir de {next_ideal_dt}."
+            maintained.append({"item": key, "desc": desc, "pts": pts, "warning": warning_msg, "proxima_visita_sugerida": rec_next_visit_msg})
+        else:
+            rec_next_visit_msg = None
+            if is_acs_visit_key:
+                ult_vis = patient.get("ultimaVisitaACS")
+                if not ult_vis or ult_vis in ["Sem registro", "-", ""]: rec_next_visit_msg = "Faça a 1ª visita agora."
+                else: rec_next_visit_msg = f"Reclame o ponto! Faça a visita a partir de {get_next_best_date_str(ult_vis)}."
+            elif indicator == 'C4' and key == 'E':
+                rec_next_visit_msg = "Sem registro de Hemoglobina Glicada no PEC e no SIAPS."
+            elif indicator == 'C7' and key == 'D':
+                rec_next_visit_msg = "Paciente elegível, mas sem registro no PEC e SIAPS."
+            elif indicator == 'C7' and key == 'A':
+                rec_next_visit_msg = "Paciente elegível, mas sem registro de citopatológico."
+                
+            pending.append({"item": key, "desc": desc, "pts": pts, "warning": rec_next_visit_msg})
+            
+    return {"gains": gains, "losses": losses, "maintained": maintained, "pending": pending}
+
+def evaluate_patient_audits(p, pec_bucket):
+    has_gain, has_loss, has_parcial = False, False, False
+    is_sem_visita = patient_needs_and_lacks_visit(p, pec_bucket)
+
+    for ind in p.get("indicadores", []):
+        if ind not in ["C2", "C3", "C4", "C5", "C6", "C7"]: continue
+        recs = get_recommendations(p, ind, pec_bucket)
+        if not recs: continue
+        if recs["gains"]: has_gain = True
+        if recs["losses"]: has_loss = True
+            
+        score = calculate_score(p, ind, pec_bucket)
+        if score is not None and 0 < score < 100: has_parcial = True
+
+    is_manter_nao_perder = is_patient_nearing_deadline(p)
+    return {
+        "hasGain": has_gain, "hasLoss": has_loss, "hasParcial": has_parcial,
+        "isSemVisita": is_sem_visita, "isManterNaoPerder": is_manter_nao_perder,
+        "noData": False
+    }
+
+def python_recalculate_engine(patients_json_str, latest_pec_bucket):
+    patients = json.loads(patients_json_str)
+    
+    uploaded_buckets = set()
+    for p in patients:
+        for b in p.get("bp", {}):
+            if p["bp"][b]:
+                uploaded_buckets.add(b)
+                
+    for p in patients:
+        p["scores"] = {}
+        p["recommendations"] = {}
+        if "bp" not in p or not p["bp"]: p["bp"] = {}
+            
+        for b in ["SIAPS", "W1", "W2", "W3", "W4"]:
+            p["scores"][b] = {}
+            p["recommendations"][b] = {}
+            
+            # Pula cálculo se o bucket inteiro nunca foi carregado no sistema
+            if b not in uploaded_buckets:
+                for ind in p.get("indicadores", []):
+                    p["scores"][b][ind] = None
+                    p["recommendations"][b][ind] = None
+                continue
+                
+            for ind in p.get("indicadores", []):
+                if ind not in ["C2", "C3", "C4", "C5", "C6", "C7"]: continue
+                p["scores"][b][ind] = calculate_score(p, ind, b)
+                p["recommendations"][b][ind] = get_recommendations(p, ind, b)
+                
+        p["audit_eval"] = evaluate_patient_audits(p, latest_pec_bucket)
+        p["is_nearing_deadline"] = is_patient_nearing_deadline(p)
+        p["interval_audit"] = calculate_interval_audit(p)
+        
+    return json.dumps(patients)
+`;
+
+    const EXCEL_COLUMNS_TARGET = [
+        'SYNC', 'FONTE', 'INDICADOR', 'DATA_REF', 'EQUIPE', 'MICROAREA', 'NOME', 'DATA_NASCIMENTO', 'IDADE', 'BOLSA_FAMILIA',
+        'CPF', 'CNS', 'ENDERECO', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+        'AUDIT', 'INT_MED', 'INT_ENF', 'DATA_ANTROPO', 'DATA_ULTIMA_VISITA_ACS', 'DATA_PENULTIMA_VISTA_ACS', 'DATA_INFLU', 'DATA_PA', 'DATA_HEMO', 'DATA_SOLICITA_HEMO',
+        'DATA_PE', 'DATA_EXAME_COLO', 'DATA_ATEND_SEXUAL', 'DATA_CANCER_MAMA', 'DATA_1A_CONSULTA', 'DATA_VISITA_ACS_1', 'DATA_VISITA_ACS_2', 'DATA_DUM', 'IDADE_1A_CONSULTA', 'N_PUERP', 'N_VISITAS_PUERP', 'N_ODONTO_PRE_NATAL',
+        'N_CONSULTA_30DIAS', 'N_ATEND_PUER', 'N_ANTROPO_24MESES',
+        'N_PRE_NATAL_12', 'N_PRE_NATAL', 'N_PA', 'N_ANTROPO', 'N_VISITAS_PRE_NATAL', 'DTPA',
+        'EXAME_HIV_PRIMEIRO', 'EXAME_SIF_PRIMEIRO', 'EXAME_HEP_B_PRIMEIRO', 'EXAME_HEP_C_PRIMEIRO',
+        'EXAME_HIV_TERCEIRO', 'EXAME_SIF_TERCEIRO', 'EXAME_CANCER_COLO', 'EXAME_CANCER_COLO_AVAL', 'EXAME_CANCER_MAMA_SOLIC', 'EXAME_CANCER_MAMA_REAL', 'EXAME_CANCER_MAMA_AVAL', 'VACINA_GRUPO1', 'VACINA_GRUPO2', 'VACINA_PNEUMO', 'VACINA_HPV', 'VACINA_POLIO'
+    ];
+
+    const EXCEL_PTS_MAP = {
+        C2: { A:20, B:20, C:20, D:20, E:20 },
+        C3: { A:10, B:9, C:9, D:9, E:9, F:9, G:9, H:9, I:9, J:9, K:9 },
+        C4: { A:20, B:15, C:15, D:20, E:15, F:15 },
+        C5: { A:25, B:25, C:25, D:25 },
+        C6: { A:25, B:25, C:25, D:25 },
+        C7: { A:20, B:30, C:30, D:20 }
+    };
+
+    const parseAge = (idadeVal, nascimentoVal) => {
+      if (idadeVal !== undefined && idadeVal !== null) {
+        const str = String(idadeVal).trim().toLowerCase();
+        if (str !== '') {
+          if (/(mes|mês|meses|dia|dias)/i.test(str) && !/ano/i.test(str)) {
+            return 0;
+          }
+          const match = str.match(/^(\d+)/);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (val >= 0 && val < 130) return val;
+          }
+        }
+      }
+      return null;
+    };
+
+    const normalizeName = (name) => {
+      if (!name) return "";
+      return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").trim();
+    };
+
+    const sanitizeIndicator = (val) => {
+      if (!val) return '';
+      let clean = String(val).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+      let match = clean.match(/(?:C|IND|INDICADOR)?0?([2-7])/); 
+      if (match) return 'C' + match[1];
+      if (clean.includes("DIABET") || clean.includes("DIAB")) return "C4";
+      if (clean.includes("HIPER") || clean.includes("HAS") || clean.includes("PRESSAO") || clean.includes("TENS")) return "C5";
+      if (clean.includes("IDOS") || clean.includes("GERI") || clean.includes("SENIL") || clean.includes("VELH")) return "C6";
+      if (clean.includes("GESTA") || clean.includes("PRE") || clean.includes("NATAL") || clean.includes("PUER")) return "C3";
+      if (clean.includes("CRIAN") || clean.includes("INFA") || clean.includes("PUERI") || clean.includes("DESENVOLV")) return "C2";
+      return 'EXCLUIDO'; 
+    };
+
+    const sanitizeTeam = (val) => {
+      if (val === null || val === undefined) return "Sem Equipe";
+      let str = String(val).trim();
+      if (str === '') return "Sem Equipe";
+      const collapsed = str.replace(/\s+/g, '');
+      if (/^\d+$/.test(collapsed)) return String(parseInt(collapsed, 10));
+      return str.replace(/\b0+(\d+)\b/g, '$1').replace(/\s+/g, ' ').trim();
+    };
+
+    const sanitizeStr = (val, fallback = 'N/D') => {
+      if (val === null || val === undefined) return fallback;
+      const str = String(val).trim();
+      return str === '' ? fallback : str;
+    };
+
+    const cleanAddress = (val) => {
+      if (val === null || val === undefined) return "Sem endereço cadastrado";
+      let str = String(val).trim();
+      if (str === '') return "Sem endereço cadastrado";
+      
+      str = str.replace(/Ã¡/g, 'a').replace(/Ã¢/g, 'a').replace(/Ã£/g, 'a')
+               .replace(/Ã©/g, 'e').replace(/Ãª/g, 'e').replace(/Ã­/g, 'i')
+               .replace(/Ã³/g, 'o').replace(/Ã´/g, 'o').replace(/Ãµ/g, 'o')
+               .replace(/Ãº/g, 'u').replace(/Ã§/g, 'c')
+               .replace(/Ã/g, 'A').replace(/Ã‚/g, 'A').replace(/Ãƒ/g, 'A')
+               .replace(/Ã‰/g, 'E').replace(/ÃŠ/g, 'E').replace(/Ã/g, 'I')
+               .replace(/Ã“/g, 'O').replace(/Ã”/g, 'O').replace(/Ã•/g, 'O')
+               .replace(/Ãš/g, 'U').replace(/Ã‡/g, 'C').replace(/Â/g, '');
+
+      str = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      str = str.replace(/[^a-zA-Z0-9\s.,-]/g, "");
+      
+      return str.trim() || "Sem endereço cadastrado";
+    };
+
+    const sanitizeMicroarea = (val) => {
+      if (val === null || val === undefined) return "XX";
+      let str = String(val).trim();
+      if (str === '' || str.toLowerCase() === 'não informada' || str.toLowerCase() === 'nao informada' || str.toLowerCase() === 'sem ma') return "XX";
+      const nums = str.replace(/\D/g, "");
+      if (nums.length > 0) return nums.padStart(2, '0'); 
+      return "XX"; 
+    };
+
+    const cleanNumber = (val) => {
+      if (!val) return "";
+      let strVal = String(val).trim();
+      if (strVal.endsWith(".0")) strVal = strVal.substring(0, strVal.length - 2);
+      return strVal.replace(/\D/g, "");
+    };
+
+    const padLeadingZeros = (numStr, targetLength) => {
+      if (!numStr) return "";
+      let s = String(numStr);
+      while (s.length < targetLength) s = "0" + s;
+      return s;
+    };
+
+    const normalizeDate = (val) => {
+      if (val === undefined || val === null) return "";
+      let s = String(val).trim();
+      if (s === '') return "";
+      
+      if (/^\d{5}(\.\d+)?$/.test(s)) {
+        const date = new Date(Math.round((parseFloat(s) - 25569) * 86400 * 1000));
+        const y = date.getUTCFullYear();
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      
+      if (s.includes('/')) {
+        const parts = s.split('/');
+        if (parts.length >= 3) {
+          let y = parts[2].split(' ')[0];
+          if (y.length === 2) y = "20" + y;
+          const m = parts[1].padStart(2, '0');
+          const d = parts[0].padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+      }
+      
+      if (s.includes('-')) {
+          const datePart = s.split(' ')[0];
+          const parts = datePart.split('-');
+          if (parts.length === 3) {
+              if (parts[0].length === 4) return datePart;
+              if (parts[2].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+      }
+      
+      return s;
+    };
+
+    const parseCSVText = (text) => {
+      const rows = []; let currentRow = []; let currentCell = ''; let inQuotes = false;
+      const delimiter = (text.split('\n')[0].match(/;/g) || []).length > (text.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '"') {
+          if (inQuotes && text[i + 1] === '"') { currentCell += '"'; i++; } else { inQuotes = !inQuotes; }
+        } else if (char === delimiter && !inQuotes) {
+          currentRow.push(currentCell.trim()); currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !inQuotes) {
+          if (char === '\r' && text[i + 1] === '\n') i++; 
+          currentRow.push(currentCell.trim());
+          if (currentRow.some(cell => cell !== '')) rows.push(currentRow);
+          currentRow = []; currentCell = '';
+        } else { currentCell += char; }
+      }
+      if (currentCell !== '' || currentRow.length > 0) { currentRow.push(currentCell.trim()); rows.push(currentRow); }
+      if (rows.length === 0) return [];
+      
+      const headers = rows[0].map(h => h.trim());
+      const parsedData = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i]; const obj = {};
+        headers.forEach((header, idx) => { obj[header] = row[idx] !== undefined ? row[idx] : ''; });
+        parsedData.push(obj);
+      }
+      return parsedData;
+    };
+
+    const MultiSelect = ({ options, selected, onChange, placeholder }) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const handleToggleOpen = (e) => { e.preventDefault(); e.stopPropagation(); setIsOpen(!isOpen); };
+      const toggleOption = (e, opt) => {
+        e.preventDefault(); e.stopPropagation();
+        if (selected.includes(opt)) onChange(selected.filter(o => o !== opt));
+        else onChange([...selected, opt]);
+      };
+
+      return (
+        <div className={`relative w-full ${isOpen ? 'z-50' : 'z-10'}`}>
+          <div onClick={handleToggleOpen} className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 cursor-pointer flex justify-between items-center transition-all hover:border-slate-400 hover:bg-slate-50 shadow-sm">
+            <span className="truncate mr-2 font-medium">{selected.length === 0 ? placeholder : `${selected.length} selecionada(s)`}</span>
+            <span className="text-slate-400 text-[10px]">{isOpen ? '▲' : '▼'}</span>
+          </div>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 bg-transparent" onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}></div>
+              <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto z-[9999]">
+                <div 
+                  className="px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer border-b border-slate-200 sticky top-0 bg-white/95 backdrop-blur flex items-center justify-between"
+                  onClick={(e) => { e.stopPropagation(); onChange([]); setIsOpen(false); }}
+                >
+                  <span>[+] Todas as Opções</span>
+                  <span className="text-[9px] text-slate-500 font-normal border border-slate-300 px-1.5 py-0.5 rounded hover:bg-slate-200 hover:text-slate-700 transition-colors">Limpar</span>
+                </div>
+                {options.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-slate-500 italic text-center">Nenhuma opção disponível...</div>
+                ) : (
+                  options.map(opt => {
+                    const isObj = typeof opt === 'object';
+                    const value = isObj ? opt.value : opt;
+                    const label = isObj ? opt.label : (opt === "XX" ? "Sem MA Vinculada (XX)" : `Microárea ${opt}`);
+                    
+                    return (
+                      <div key={value} onClick={(e) => toggleOption(e, value)} className="px-3 py-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 cursor-pointer flex items-center gap-2.5 border-b border-slate-100 last:border-0 transition-colors">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${selected.includes(value) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
+                          {selected.includes(value) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                        </div>
+                        <span className="font-medium truncate">{label}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+
+    const Pagination = ({ currentPage, totalItems, rowsPerPage, onPageChange }) => {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      if (totalPages <= 1) return null;
+      return (
+        <div className="flex items-center justify-between px-5 py-3 bg-white border-t border-slate-200">
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Página {currentPage} de {totalPages}</span>
+          <div className="flex gap-2">
+            <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase border border-slate-200">Anterior</button>
+            <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase border border-slate-200">Próxima</button>
+          </div>
+        </div>
+      )
+    };
+
+    const compareEnderecos = (a, b) => {
+      const strA = String(a || "").trim();
+      const strB = String(b || "").trim();
+      return strA.localeCompare(strB, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    };
+
+    function App() {
+      const [pyodide, setPyodide] = useState(null);
+      const [patientsData, setPatientsData] = useState([]);
+      const [activeTab, setActiveTab] = useState('indicators'); 
+      const [selectedTeam, setSelectedTeam] = useState('Todas'); 
+      const [selectedMicroareas, setSelectedMicroareas] = useState([]); 
+      const [baseFilter, setBaseFilter] = useState('pura'); 
+      const [patientIndicatorFilter, setPatientIndicatorFilter] = useState('TODAS');
+      const [searchQuery, setSearchQuery] = useState('');
+      const [activeAuditFilter, setActiveAuditFilter] = useState('todos');
+      const [activeIndicatorView, setActiveIndicatorView] = useState('TODOS');
+      const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
+      const [showPythonCodePanel, setShowPythonCodePanel] = useState(false);
+      const [appLogs, setAppLogs] = useState([]);
+      const [uploadStatus, setUploadStatus] = useState({}); 
+      
+      const [uploadLoading, setUploadLoading] = useState({ show: false, text: '', progress: 0 });
+      
+      const [selectedExameTypes, setSelectedExameTypes] = useState([]); 
+      const [statusExameFilter, setStatusExameFilter] = useState('TODOS'); 
+      
+      const [currentPagePats, setCurrentPagePats] = useState(1);
+      const [currentPageRot, setCurrentPageRot] = useState(1);
+      const [currentPageExames, setCurrentPageExames] = useState(1);
+      const rowsPerPage = 50; 
+
+      useEffect(() => {
+        const initPythonEngine = async () => {
+          const statusEl = document.getElementById("loader-status");
+          try {
+            statusEl.innerText = "Carregando WebAssembly do Python...";
+            const pyInstance = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/" });
+            
+            statusEl.innerText = "Carregando metodologia de cálculo e otimizações...";
+            await pyInstance.runPythonAsync(PYTHON_CALCULATOR_CODE);
+            setPyodide(pyInstance);
+            
+            const loader = document.getElementById("loader-screen");
+            if (loader) loader.classList.add("opacity-0", "pointer-events-none");
+            
+            setAppLogs([{ time: new Date().toLocaleTimeString(), type: 'SUCCESS', msg: 'Motor analítico Python ativo e pronto.' }]);
+            
+          } catch (err) {
+            if (statusEl) statusEl.innerText = "Erro ao iniciar o Python. Por favor, recarregue a página.";
+            console.error(err);
+          }
+        };
+
+        initPythonEngine();
+      }, []);
+
+      const latestPecBucket = useMemo(() => {
+        if (patientsData.length === 0) return 'W1';
+        for (let b of ['W4', 'W3', 'W2', 'W1']) {
+          if (patientsData.some(p => p.bp && p.bp[b] && Object.keys(p.bp[b]).length > 0)) return b;
+        }
+        return 'W1';
+      }, [patientsData]);
+
+      const recalculateWithPython = (rawDataset, pyInstance = pyodide) => {
+        if (!pyInstance || rawDataset.length === 0) return;
+        try {
+          const jsonStringified = JSON.stringify(rawDataset);
+          const tempBucket = (() => {
+            for (let b of ['W4', 'W3', 'W2', 'W1']) {
+              if (rawDataset.some(p => p.bp && p.bp[b] && Object.keys(p.bp[b]).length > 0)) return b;
+            }
+            return 'W1';
+          })();
+
+          const resultStr = pyInstance.globals.get('python_recalculate_engine')(jsonStringified, tempBucket);
+          const calculatedData = JSON.parse(resultStr);
+          setPatientsData(calculatedData);
+          
+          setAppLogs(prev => [
+            { time: new Date().toLocaleTimeString(), type: 'INFO', msg: `Recálculo concluído. Comparando colunas SIAPS vs Colunas W1-W4.` },
+            ...prev
+          ]);
+        } catch (error) {
+          console.error("Erro no motor analítico Python:", error);
+          showToastNotification("Falha interna de recálculo em Python.", "error");
+        }
+      };
+
+      const showToastNotification = (message, type = 'info') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'info' }), 4000);
+      };
+
+      const handleClearMockData = () => {
+        setPatientsData([]);
+        setUploadStatus({});
+        setAppLogs(logs => [{ time: new Date().toLocaleTimeString(), type: 'WARNING', msg: 'Banco de dados limpo.' }, ...logs]);
+        showToastNotification("Banco de pacientes limpo!", "success");
+      };
+
+      const handleExcelUpload = async (e, targetBucket) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        setUploadLoading({ show: true, text: `Preparando leitura da coluna ${targetBucket}...`, progress: 5 });
+        await new Promise(r => setTimeout(r, 100)); // Pequeno delay para forçar renderização da UI
+
+        let aggregatedData = [...patientsData];
+        let logsToAppend = [];
+        let blockUpload = false;
+
+        for (let idx = 0; idx < files.length; idx++) {
+          const file = files[idx];
+          setUploadLoading({ show: true, text: `Lendo ${file.name}...`, progress: 10 + (idx / files.length) * 40 });
+          await new Promise(r => setTimeout(r, 50));
+          
+          try {
+            const data = await file.arrayBuffer();
+            let rawJson = [];
+            
+            if (file.name.endsWith('.csv')) {
+              const text = new TextDecoder('utf-8').decode(data);
+              rawJson = parseCSVText(text);
+            } else {
+              const workbook = XLSX.read(data, { type: 'array' });
+              rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
+            }
+
+            const { patients: updatedPatients, hasErrors, errorMsg } = processRawUploadedDataBatch(aggregatedData, rawJson, file.name, targetBucket);
+            
+            if (hasErrors) {
+                blockUpload = true;
+                showToastNotification(errorMsg, "error");
+                logsToAppend.push({ time: new Date().toLocaleTimeString(), type: 'ERROR', msg: `Upload rejeitado: ${errorMsg}` });
+                break;
+            }
+
+            aggregatedData = updatedPatients;
+
+          } catch (err) {
+            logsToAppend.push({ time: new Date().toLocaleTimeString(), type: 'ERROR', msg: `Falha ao ler arquivo ${file.name}.` });
+          }
+        }
+
+        e.target.value = null; // Reset
+        if (logsToAppend.length > 0) setAppLogs(prev => [...logsToAppend, ...prev]);
+
+        if (!blockUpload) {
+            setUploadLoading({ show: true, text: `Calculando GAPs Assistenciais com Python...`, progress: 80 });
+            await new Promise(r => setTimeout(r, 100));
+            
+            recalculateWithPython(aggregatedData);
+            
+            setUploadLoading({ show: true, text: `Finalizando...`, progress: 95 });
+            await new Promise(r => setTimeout(r, 100));
+
+            const dataRef = new Date().toLocaleDateString('pt-BR');
+            setUploadStatus(prev => ({ ...prev, [targetBucket]: dataRef }));
+            showToastNotification(`Dados gravados na coluna ${targetBucket} com sucesso!`, "success");
+        }
+        
+        setUploadLoading({ show: false, text: '', progress: 0 });
+      };
+
+      const parseCriterion = (val) => {
+        if (val === undefined || val === null) return false;
+        const s = String(val).trim().toUpperCase();
+        if (s === 'N/A' || s === 'NA' || s === 'N/D') return "NA";
+        return s === '1' || s === 'SIM' || s === 'S' || s === 'TRUE' || s === 'X' || s === 'OK' || s === '✓' || s === 'CUMPRIDO';
+      };
+
+      const getRowCriterion = (row, letter) => {
+        const target = letter.toUpperCase().trim();
+        const foundKey = Object.keys(row).find(k => k.trim().toUpperCase() === target);
+        return foundKey ? row[foundKey] : undefined;
+      };
+
+      const processRawUploadedDataBatch = (currentPatientsList, rawData, fileName, strictTargetBucket) => {
+        if (!rawData || rawData.length === 0) return { patients: currentPatientsList, hasErrors: true, errorMsg: 'Planilha vazia.' }; 
+        const updatedPatients = [...currentPatientsList];
+        let processados = 0; let ignorados = 0;
+
+        rawData.forEach(row => {
+          const getVal = (colNames) => {
+            const found = Object.keys(row).find(k => colNames.some(name => name.toUpperCase().trim() === k.toUpperCase().trim()));
+            return found ? row[found] : undefined;
+          };
+
+          const rowBucket = strictTargetBucket;
+          const isPecRow = rowBucket !== 'SIAPS';
+
+          let indicadorVal = sanitizeIndicator(getVal(['INDICADOR', 'IND']));
+          if (indicadorVal === 'EXCLUIDO') { ignorados++; return; }
+
+          let rawCpf = getVal(['CPF']); let rawCns = getVal(['CNS']);
+          let num1 = cleanNumber(rawCpf); let num2 = cleanNumber(rawCns);
+          let cpf = ""; let cns = "";
+          
+          if (num1.length === 11) cpf = num1; else if (num1.length === 15) cns = num1;
+          if (num2.length === 11) cpf = num2; else if (num2.length === 15) cns = num2;
+          if (!cpf && num1.length > 0 && num1.length < 11) cpf = padLeadingZeros(num1, 11);
+          if (!cns && num2.length > 0 && num2.length < 15) cns = padLeadingZeros(num2, 15);
+
+          const displayCpf = cpf ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : "N/I";
+          const displayCns = cns ? cns.replace(/(\d{3})(\d{4})(\d{4})(\d{4})/, "$1 $2 $3 $4") : "N/I";
+          const nome = sanitizeStr(getVal(['NOME', 'PACIENTE']), "Paciente Sem Nome Registrado");
+          
+          let existingIndex = -1;
+          if (cpf) existingIndex = updatedPatients.findIndex(p => cleanNumber(p.cpf) === cpf);
+          if (existingIndex === -1 && cns) existingIndex = updatedPatients.findIndex(p => cleanNumber(p.cns) === cns);
+          if (existingIndex === -1 && !cpf && !cns && nome && isPecRow) {
+            const normName = normalizeName(nome);
+            existingIndex = updatedPatients.findIndex(p => p.nomePec && normalizeName(p.nomePec) === normName);
+          }
+
+          const endereco = cleanAddress(getVal(['ENDERECO', 'ENDEREÇO', 'RUA', 'LOGRADOURO', 'BAIRRO']));
+          const isBolsaFamilia = parseCriterion(getVal(['BOLSA FAMILIA', 'BOLSA_FAMILIA', 'BF', 'AUXILIO BRASIL', 'AUXILIO'])) === true;
+          const equipeVal = sanitizeTeam(getVal(['EQUIPE', 'INE', 'EQUIPA']));
+          const microareaVal = sanitizeMicroarea(getVal(['MICROAREA', 'MA']));
+          const auditText = sanitizeStr(getVal(['AUDIT', 'AUDITORIA']), "");
+          const computedAge = parseAge(getVal(['IDADE', 'IDADE_ANOS', 'IDADE_ATUAL']), getVal(['DATA_NASCIMENTO', 'DATA_NASC', 'NASCIMENTO', 'NASC']));
+          const finalIdadeString = computedAge !== null ? String(computedAge) : "N/I";
+          
+          const novaDataVisita = sanitizeStr(normalizeDate(getVal(['DATA_ULTIMA_VISITA_ACS', 'ULTIMA_VISITA_ACS', 'DATA_ULTIMA_VISITA', 'DATA_VISITA_ACS'])), "Sem registro");
+          const intMedVal = sanitizeStr(normalizeDate(getVal(['INT_MED', 'MEDICO', 'CONSULTA_MEDICA', 'MED'])), "Sem registro");
+          const intEnfVal = sanitizeStr(normalizeDate(getVal(['INT_ENF', 'ENFERMEIRO', 'CONSULTA_ENFERMAGEM', 'ENF'])), "Sem registro");
+
+          if (existingIndex === -1) {
+            const uniqueKey = displayCpf !== "N/I" ? displayCpf : (displayCns !== "N/I" ? displayCns : `p_${Math.random().toString(36).substr(2, 4)}`);
+            const newPatient = {
+              id: `p_${Math.random().toString(36).substr(2, 9)}`, uniqueKey, 
+              nomeSiaps: isPecRow ? "" : nome, nomePec: isPecRow ? nome : "",
+              cpf: displayCpf, cns: displayCns, endereco: endereco, bolsaFamilia: isBolsaFamilia, idade: finalIdadeString,
+              equipe: equipeVal, microarea: microareaVal, indicadores: [indicadorVal],
+              audits: { [rowBucket]: { [indicadorVal]: auditText } },
+              bp: { [rowBucket]: { [indicadorVal]: {} } },
+              rawDataOriginal: { [indicadorVal]: row },
+              rawDataOriginalPec: isPecRow ? { [indicadorVal]: row } : {},
+              ultimaVisitaACS: novaDataVisita,
+              penultimaVisitaACS: sanitizeStr(normalizeDate(getVal(['DATA_PENULTIMA_VISTA_ACS', 'DATA_PENULTIMA_VISITA_ACS', 'PENULTIMA_VISITA_ACS'])), "Sem registro"),
+              intMed: intMedVal,
+              intEnf: intEnfVal,
+              dataExecucoes: { 
+                consulta: sanitizeStr(normalizeDate(getVal(['DATA_CONSULTA'])), ""), pa: sanitizeStr(normalizeDate(getVal(['DATA_PA'])), ""), 
+                antropo: sanitizeStr(normalizeDate(getVal(['DATA_ANTROPO'])), ""), exameColo: sanitizeStr(normalizeDate(getVal(['DATA_EXAME_COLO'])), ""), hemo: sanitizeStr(normalizeDate(getVal(['DATA_HEMOGLOBINA'])), "")
+              }
+            };
+
+            ['A','B','C','D','E','F','G','H','I','J','K'].forEach(c => { 
+                const critVal = parseCriterion(getRowCriterion(row, c));
+                if (critVal === true) newPatient.bp[rowBucket][indicadorVal][c] = true; 
+                else if (critVal === "NA") newPatient.bp[rowBucket][indicadorVal][c] = "NA";
+            });
+            updatedPatients.push(newPatient);
+          } else {
+            const existingPatient = { ...updatedPatients[existingIndex] };
+            if (!existingPatient.indicadores.includes(indicadorVal)) existingPatient.indicadores = [...existingPatient.indicadores, indicadorVal].sort();
+            if (displayCpf !== "N/I" && existingPatient.cpf === "N/I") existingPatient.cpf = displayCpf;
+            if (displayCns !== "N/I" && existingPatient.cns === "N/I") existingPatient.cns = displayCns;
+            if (endereco !== "Sem endereço cadastrado" && existingPatient.endereco === "Sem endereço cadastrado") existingPatient.endereco = endereco;
+            if (microareaVal && microareaVal !== "XX" && (!existingPatient.microarea || existingPatient.microarea === "XX")) existingPatient.microarea = microareaVal;
+            if (equipeVal !== "Sem Equipe" && existingPatient.equipe === "Sem Equipe") existingPatient.equipe = equipeVal;
+            if (isBolsaFamilia) existingPatient.bolsaFamilia = true;
+            if (finalIdadeString !== "N/I") existingPatient.idade = finalIdadeString;
+            if (isPecRow) existingPatient.nomePec = nome; else existingPatient.nomeSiaps = nome;
+
+            if (isPecRow && novaDataVisita !== "Sem registro") {
+                existingPatient.ultimaVisitaACS = novaDataVisita;
+            } else if ((!existingPatient.ultimaVisitaACS || existingPatient.ultimaVisitaACS === "Sem registro") && novaDataVisita !== "Sem registro") {
+                existingPatient.ultimaVisitaACS = novaDataVisita;
+            }
+
+            if (intMedVal !== "Sem registro") existingPatient.intMed = intMedVal;
+            if (intEnfVal !== "Sem registro") existingPatient.intEnf = intEnfVal;
+
+            existingPatient.audits = existingPatient.audits || {};
+            existingPatient.audits[rowBucket] = existingPatient.audits[rowBucket] || {};
+            existingPatient.audits[rowBucket][indicadorVal] = auditText;
+
+            existingPatient.bp = { ...existingPatient.bp };
+            if (!existingPatient.bp[rowBucket]) existingPatient.bp[rowBucket] = {};
+            existingPatient.bp[rowBucket] = { ...existingPatient.bp[rowBucket] };
+            if (!existingPatient.bp[rowBucket][indicadorVal]) existingPatient.bp[rowBucket][indicadorVal] = {};
+            
+            existingPatient.rawDataOriginal = existingPatient.rawDataOriginal || {};
+            existingPatient.rawDataOriginal[indicadorVal] = { ...existingPatient.rawDataOriginal[indicadorVal], ...row };
+            
+            if (isPecRow) {
+                existingPatient.rawDataOriginalPec = existingPatient.rawDataOriginalPec || {};
+                existingPatient.rawDataOriginalPec[indicadorVal] = { ...existingPatient.rawDataOriginalPec[indicadorVal], ...row };
+            }
+
+            existingPatient.bp[rowBucket][indicadorVal] = { ...existingPatient.bp[rowBucket][indicadorVal] };
+
+            ['A','B','C','D','E','F','G','H','I','J','K'].forEach(c => { 
+                const critVal = parseCriterion(getRowCriterion(row, c));
+                if (critVal === true) existingPatient.bp[rowBucket][indicadorVal][c] = true; 
+                else if (critVal === "NA") existingPatient.bp[rowBucket][indicadorVal][c] = "NA";
+            });
+            updatedPatients[existingIndex] = existingPatient;
+          }
+          processados++;
+        });
+
+        if (processados === 0) return { patients: currentPatientsList, hasErrors: true, errorMsg: `Nenhum dado extraído.` };
+
+        setAppLogs(logs => [ { time: new Date().toLocaleTimeString(), type: 'SUCCESS', msg: `Planilha "${fileName}" integrada. Lidos: ${processados} registros.\nTravado e Inserido estritamente na coluna: [${strictTargetBucket}].` }, ...logs ]);
+        
+        return { patients: updatedPatients, hasErrors: false };
+      };
+
+      const handleGeneratePDFReport = async () => {
+        setUploadLoading({ show: true, text: 'Gerando Relatório PDF (Extraindo métricas)...', progress: 30 });
+        await new Promise(r => setTimeout(r, 100));
+
+        const dataEmissao = new Date().toLocaleDateString('pt-BR');
+        const horaEmissao = new Date().toLocaleTimeString('pt-BR');
+        const descEquipe = selectedTeam;
+        const descMicroarea = selectedMicroareas.length ? selectedMicroareas.join(', ') : 'Todas';
+        const descUniverso = baseFilter === 'pura' ? 'Todos os Pacientes' : baseFilter === 'sincronizada' ? 'Apenas Sincronizados' : 'Não Sincronizados';
+
+        let contentHtml = '';
+
+        // Página 1: Resumo Global
+        contentHtml += `
+            <div class="page-break">
+                <div class="card" style="margin-bottom: 30px;">
+                    <div style="background-color: #f1f5f9; padding: 15px; border-bottom: 1px solid #cbd5e1;">
+                        <h2 style="margin: 0; color: #1e3a8a; font-size: 16px; text-transform: uppercase;">Evolução do Desempenho Global (Média Síntese)</h2>
+                    </div>
+                    <div style="padding: 20px; text-align: center;">
+                        <table style="width: 100%; border-collapse: separate; border-spacing: 15px 0;">
+                            <tr>
+                                ${globalWeeklyStats.map(s => `
+                                    <td style="border: 1px solid ${s.bucket === latestPecBucket ? '#c7d2fe' : '#e2e8f0'}; background-color: ${s.bucket === latestPecBucket ? '#eef2ff' : '#ffffff'}; padding: 20px; border-radius: 12px; width: 20%;">
+                                        <div style="font-size: 28px; font-weight: bold; color: ${s.bucket === latestPecBucket ? '#4f46e5' : '#334155'};">${s.count > 0 || s.bucket === 'SIAPS' ? `${s.avg}%` : '-'}</div>
+                                        <div style="font-size: 11px; font-weight: bold; color: #64748b; margin-top: 5px; text-transform: uppercase;">${s.bucket === 'SIAPS' ? 'SIAPS (Base)' : s.bucket.replace('W', 'Semana ')}</div>
+                                        <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">${s.count > 0 || s.bucket === 'SIAPS' ? `${s.count} Alvos` : 'Pendente'}</div>
+                                    </td>
+                                `).join('')}
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        setUploadLoading({ show: true, text: 'Finalizando layout e renderizando...', progress: 75 });
+        await new Promise(r => setTimeout(r, 100));
+
+        // Páginas seguintes: Um por indicador
+        const metadata = {
+            C2: { name: "CUIDADO NO DESENVOLVIMENTO INFANTIL" }, C3: { name: "CUIDADO NA GESTAÇÃO E PUERPÉRIO" },
+            C4: { name: "CUIDADO DA PESSOA COM DIABETES" }, C5: { name: "CUIDADO DA PESSOA COM HIPERTENSÃO" },
+            C6: { name: "CUIDADO DA PESSOA IDOSA" }, C7: { name: "CUIDADO DA MULHER NA PREVENÇÃO DO CÂNCER" }
+        };
+        
+        const itemsDetails = {
+            C2: { A: "1ª consulta presencial até 30º dia", B: "09 consultas até 2 anos", C: "09 registros peso/altura", D: "02 visitas ACS", E: "Vacinas completas" },
+            C3: { A: "1ª consulta até 12ª sem", B: "07 consultas pré-natal", C: "07 registros de PA", D: "07 registros peso/altura", E: "03 visitas ACS", F: "dTpa a partir 20ª sem", G: "Testes rápidos HIV/Sífilis 1º Tri", H: "Testes rápidos HIV/Sífilis 3º Tri", I: "Consulta puerpério", J: "Visita ACS puerpério", K: "Atendimento odontológico" },
+            C4: { A: "Consulta presencial (6m)", B: "Aferição de PA (6m)", C: "Peso/Altura (12m)", D: "02 Visitas ACS (12m)", E: "Hemoglobina Glicada", F: "Avaliação do pé diabético" },
+            C5: { A: "Consulta presencial (6m)", B: "Aferição de PA (6m)", C: "Peso/Altura (12m)", D: "02 Visitas ACS (12m)" },
+            C6: { A: "Consulta presencial (12m)", B: "Peso/Altura (12m)", C: "02 Visitas ACS (12m)", D: "Vacina Influenza" },
+            C7: { A: "Rastreio câncer colo do útero (últ. 36m)", B: "Vacina HPV (09 a 14 anos)", C: "Atendimento saúde sexual/reprod. (últ. 12m)", D: "Rastreamento câncer de mama (50 a 69 anos)" }
+        };
+
+        const itemsListByInd = { C2: ['A','B','C','D','E'], C3: ['A','B','C','D','E','F','G','H','I','J','K'], C4: ['A','B','C','D','E','F'], C5: ['A','B','C','D'], C6: ['A','B','C','D'], C7: ['A','B','C','D'] };
+
+        CORE_INDICATORS.forEach(indCode => {
+            if (activeIndicatorView !== 'TODOS' && activeIndicatorView !== indCode) return;
+
+            const indScoresPerBucket = BUCKETS.map(b => {
+                let bTotalScore = 0; let bCount = 0;
+                baseFilteredPatients.forEach(p => {
+                    if (p.indicadores && p.indicadores.includes(indCode)) {
+                        const val = p.scores?.[b]?.[indCode];
+                        if (val !== null && val !== undefined) { bCount++; bTotalScore += val; }
+                    }
+                });
+                return { bucket: b, avg: bCount > 0 ? Math.round(bTotalScore / bCount) : 0, count: bCount };
+            });
+
+            const itemsList = itemsListByInd[indCode];
+
+            contentHtml += `
+                <div class="page-break card" style="margin-bottom: 30px;">
+                    <div style="background-color: #f8fafc; padding: 15px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center;">
+                        <span style="background-color: #4f46e5; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 14px; margin-right: 10px;">${indCode}</span>
+                        <h2 style="margin: 0; color: #1e293b; font-size: 16px; font-weight: bold;">${metadata[indCode].name}</h2>
+                    </div>
+
+                    <div style="padding: 20px;">
+                        <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
+                            <h3 style="margin: 0 0 10px 0; font-size: 12px; color: #4338ca; text-transform: uppercase;">Desempenho Direto (${indCode})</h3>
+                            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 10px 0;">
+                                <tr>
+                                    ${indScoresPerBucket.map(s => {
+                                        const hasData = s.count > 0 || s.bucket === 'SIAPS';
+                                        const color = !hasData ? '#94a3b8' : s.avg >= 80 ? '#15803d' : s.avg >= 50 ? '#b45309' : '#b91c1c';
+                                        const bg = !hasData ? '#f1f5f9' : s.avg >= 80 ? '#f0fdf4' : s.avg >= 50 ? '#fffbeb' : '#fef2f2';
+                                        const bd = !hasData ? '#e2e8f0' : s.avg >= 80 ? '#bbf7d0' : s.avg >= 50 ? '#fde68a' : '#fecaca';
+                                        return `
+                                        <td style="border: 1px solid ${bd}; background-color: ${bg}; padding: 15px; border-radius: 8px; width: 20%;">
+                                            <div style="font-size: 20px; font-weight: bold; color: ${color};">${hasData ? `${s.avg}%` : '-'}</div>
+                                            <div style="font-size: 10px; font-weight: bold; color: #64748b; margin-top: 5px; text-transform: uppercase;">${s.bucket}</div>
+                                            <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">${hasData ? `${s.count} Alvos` : 'Pendente'}</div>
+                                        </td>
+                                        `;
+                                    }).join('')}
+                                </tr>
+                            </table>
+                        </div>
+
+                        <h3 style="font-size: 12px; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 15px;">Critérios Assistenciais Detalhados</h3>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                            <thead>
+                                <tr style="background-color: #f1f5f9;">
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #cbd5e1; width: 30%;">Requisito Clínico</th>
+                                    ${BUCKETS.map(b => `<th style="padding: 10px; text-align: center; border: 1px solid #cbd5e1;">${b}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsList.map(k => {
+                                    const statsPerBucket = BUCKETS.map(b => {
+                                        let feitos = 0; let pendentes = 0; let semFaturamento = 0; let isentos = 0;
+                                        const isBucketActive = baseFilteredPatients.some(p => p.scores?.[b]?.[indCode] !== null && p.scores?.[b]?.[indCode] !== undefined);
+                                        baseFilteredPatients.forEach(p => {
+                                            if (p.indicadores && p.indicadores.includes(indCode)) {
+                                                if (!isBucketActive || p.bp?.[b]?.[indCode] === undefined) { semFaturamento++; return; }
+                                                let isOk = p.bp?.[b]?.[indCode]?.[k];
+                                                if (isOk === "NA") { isentos++; } else if(isOk === true) { feitos++; } else { pendentes++; }
+                                            }
+                                        });
+                                        return { bucket: b, feitos, pendentes, semFaturamento, isentos };
+                                    });
+
+                                    return `
+                                    <tr>
+                                        <td style="padding: 10px; border: 1px solid #cbd5e1; font-weight: bold; color: #334155;">
+                                            <span style="color: #64748b; margin-right: 4px;">[${k}]</span> ${itemsDetails[indCode][k]}
+                                        </td>
+                                        ${statsPerBucket.map(obj => {
+                                            const total = obj.feitos + obj.pendentes;
+                                            const percentage = total > 0 ? Math.round((obj.feitos / total) * 100) : 0;
+                                            const isMuted = obj.semFaturamento > 0 && total === 0 && obj.isentos === 0;
+                                            const textColor = isMuted ? '#94a3b8' : percentage >= 80 ? '#16a34a' : percentage >= 50 ? '#d97706' : '#dc2626';
+                                            
+                                            if (isMuted) {
+                                                return `<td style="padding: 10px; text-align: center; border: 1px solid #cbd5e1; color: #94a3b8; font-style: italic;">Pendente</td>`;
+                                            } else if (total === 0 && obj.isentos > 0) {
+                                                return `<td style="padding: 10px; text-align: center; border: 1px solid #cbd5e1; color: #6366f1; font-weight: bold;">Isentos N/A</td>`;
+                                            } else {
+                                                return `
+                                                <td style="padding: 10px; text-align: center; border: 1px solid #cbd5e1;">
+                                                    <div style="font-size: 14px; font-weight: bold; color: ${textColor};">${percentage}%</div>
+                                                    <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${obj.feitos} / ${total}</div>
+                                                    ${obj.isentos > 0 ? `<div style="font-size: 8px; color: #94a3b8; margin-top: 2px;">+${obj.isentos} N/A</div>` : ''}
+                                                </td>
+                                                `;
+                                            }
+                                        }).join('')}
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        });
+
+        const finalHtml = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <title>Relatório Executivo de Desempenho</title>
+                <style>
+                    @page { size: A4; margin: 12mm; }
+                    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: #fff; margin: 0; padding: 0; }
+                    .page-break { page-break-after: always; }
+                    table.print-wrapper { width: 100%; border-collapse: collapse; }
+                    .print-header { padding-bottom: 15px; border-bottom: 3px solid #1e3a8a; margin-bottom: 20px; }
+                    .print-title { font-size: 20px; font-weight: bold; color: #1e3a8a; text-transform: uppercase; letter-spacing: -0.5px; }
+                    .print-meta { font-size: 10px; color: #475569; margin-top: 6px; line-height: 1.4; }
+                    .card { border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; page-break-inside: avoid; }
+                    .no-print { display: none; }
+                    @media print { .no-print { display: none; } }
+                </style>
+            </head>
+            <body>
+                <table class="print-wrapper">
+                    <thead style="display: table-header-group;">
+                        <tr>
+                            <th style="text-align: left; padding-top: 10px;">
+                                <div class="print-header">
+                                    <div class="print-title">Monitor de Desempenho - Relatório Analítico (A4)</div>
+                                    <div class="print-meta">
+                                        <strong>Emitido em:</strong> ${dataEmissao} às ${horaEmissao} | <strong>Universo:</strong> ${descUniverso}<br>
+                                        <strong>Equipe (INE):</strong> ${descEquipe} | <strong>Microáreas Filtradas:</strong> ${descMicroarea}
+                                    </div>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                ${contentHtml}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <script>
+                    window.onload = function() {
+                        setTimeout(function() { window.print(); }, 500);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([finalHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        setUploadLoading({ show: false, text: '', progress: 0 });
+        showToastNotification("PDF Gerado e pronto para impressão/salvamento!", "success");
+      };
+
+      const exportToExcel = async () => {
+          setUploadLoading({ show: true, text: 'Preparando dados para Planilha de Pontos...', progress: 20 });
+          await new Promise(r => setTimeout(r, 100));
+          
+          const rowsToExport = [];
+
+          baseFilteredPatients.forEach(p => {
+              const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+              coreInds.forEach(ind => {
+                  // A fonte deve ser SOMENTE a última planilha do PEC (latestPecBucket).
+                  const isLastPec = p.bp?.[latestPecBucket]?.[ind] !== undefined;
+                  
+                  // Se o paciente/indicador não estiver faturado na última planilha carregada, ignora.
+                  if (!isLastPec) return;
+                  
+                  const isSiaps = p.bp?.['SIAPS']?.[ind] !== undefined;
+                  // O cruzamento ocorre com quem está no SIAPS E na última planilha
+                  const isSincronizado = isSiaps && isLastPec;
+                  
+                  const fonteDataRef = latestPecBucket; 
+                  
+                  // Resgata o envio cru correspondente (para manter endereço, idade crua, data, etc.)
+                  const rowRawData = p.rawDataOriginalPec?.[ind] || p.rawDataOriginal?.[ind] || {};
+
+                  // Função para buscar a chave original independente de Case
+                  const getOriginalVal = (colName) => {
+                      const foundKey = Object.keys(rowRawData).find(k => k.toUpperCase().trim() === colName.toUpperCase().trim());
+                      return foundKey ? rowRawData[foundKey] : '';
+                  };
+
+                  const originalDataRef = getOriginalVal('DATA_REF') || getOriginalVal('COMPETENCIA');
+
+                  const row = {
+                      SYNC: isSincronizado ? 'SIM' : 'NAO',
+                      FONTE: fonteDataRef,
+                      INDICADOR: ind,
+                      DATA_REF: originalDataRef ? originalDataRef : new Date().toLocaleDateString('pt-BR'),
+                      EQUIPE: getOriginalVal('EQUIPE') || p.equipe || '',
+                      MICROAREA: getOriginalVal('MICROAREA') || p.microarea || '',
+                      NOME: getOriginalVal('NOME') || p.nomePec || p.nomeSiaps || '',
+                      DATA_NASCIMENTO: getOriginalVal('DATA_NASCIMENTO') || getOriginalVal('DATA_NASC') || '', 
+                      IDADE: getOriginalVal('IDADE') || (p.idade && p.idade !== "N/I" ? p.idade : ''),
+                      BOLSA_FAMILIA: getOriginalVal('BOLSA_FAMILIA') || getOriginalVal('BOLSA FAMILIA') || (p.bolsaFamilia ? 'SIM' : 'NAO'),
+                      CPF: getOriginalVal('CPF') || (p.cpf !== 'N/I' ? p.cpf : ''),
+                      CNS: getOriginalVal('CNS') || (p.cns !== 'N/I' ? p.cns : ''),
+                      ENDERECO: getOriginalVal('ENDERECO') || (p.endereco !== "Sem endereço cadastrado" ? p.endereco : '')
+                  };
+
+                  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach(letter => {
+                      // Confere se essa letra faz parte deste indicador para evitar pontuar lixo de planilhas erradas
+                      const pts = EXCEL_PTS_MAP[ind]?.[letter];
+                      
+                      if (pts !== undefined) {
+                          const rawVal = getOriginalVal(letter);
+                          const critVal = parseCriterion(rawVal);
+                          
+                          if (critVal === true) {
+                              row[letter] = pts; // Coloca a exata pontuação da meta
+                          } else if (critVal === 'NA') {
+                              row[letter] = 'NA';
+                          } else {
+                              row[letter] = ''; // Substitui falso ou caracteres esquisitos por vazio
+                          }
+                      } else {
+                          row[letter] = ''; // Se a letra não pertence ao indicador atual, fica vazio.
+                      }
+                  });
+
+                  row['DATA_ULTIMA_VISITA_ACS'] = getOriginalVal('DATA_ULTIMA_VISITA_ACS') || getOriginalVal('ULTIMA_VISITA_ACS') || (p.ultimaVisitaACS && p.ultimaVisitaACS !== "Sem registro" ? p.ultimaVisitaACS : '');
+                  row['DATA_PENULTIMA_VISTA_ACS'] = getOriginalVal('DATA_PENULTIMA_VISTA_ACS') || getOriginalVal('PENULTIMA_VISITA_ACS') || (p.penultimaVisitaACS && p.penultimaVisitaACS !== "Sem registro" ? p.penultimaVisitaACS : '');
+                  row['DATA_ANTROPO'] = getOriginalVal('DATA_ANTROPO') || (p.dataExecucoes?.antropo && p.dataExecucoes?.antropo !== "Sem registro" ? p.dataExecucoes?.antropo : '');
+                  row['DATA_PA'] = getOriginalVal('DATA_PA') || (p.dataExecucoes?.pa && p.dataExecucoes?.pa !== "Sem registro" ? p.dataExecucoes?.pa : '');
+                  row['DATA_HEMO'] = getOriginalVal('DATA_HEMO') || (p.dataExecucoes?.hemo && p.dataExecucoes?.hemo !== "Sem registro" ? p.dataExecucoes?.hemo : '');
+                  row['DATA_EXAME_COLO'] = getOriginalVal('DATA_EXAME_COLO') || (p.dataExecucoes?.exameColo && p.dataExecucoes?.exameColo !== "Sem registro" ? p.dataExecucoes?.exameColo : '');
+
+                  const formatExportDate = (val) => {
+                      if (!val || val === "Sem registro" || val === "-" || val === "N/D" || val === "N/I") return val;
+                      let str = String(val).trim();
+                      
+                      if (/^\d{4,5}(\.\d+)?$/.test(str)) {
+                          const date = new Date(Math.round((parseFloat(str) - 25569) * 86400 * 1000));
+                          const y = date.getUTCFullYear();
+                          const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+                          const d = String(date.getUTCDate()).padStart(2, '0');
+                          return `${d}/${m}/${y}`;
+                      }
+
+                      if (str.includes('-')) {
+                          const datePart = str.split(' ')[0];
+                          const parts = datePart.split('-');
+                          if (parts.length === 3 && parts[0].length === 4) {
+                              return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                          }
+                      }
+                      
+                      return str.replace(/\./g, '/');
+                  };
+
+                  // A ordem das colunas é garantida estritamente mantendo iterando pelo EXCEL_COLUMNS_TARGET
+                  EXCEL_COLUMNS_TARGET.forEach(col => {
+                      let val = row[col] === undefined ? getOriginalVal(col) : row[col];
+                      if (col.startsWith('DATA_') || col === 'DTPA') {
+                          row[col] = formatExportDate(val);
+                      } else {
+                          row[col] = val;
+                      }
+                  });
+
+                  rowsToExport.push(row);
+              });
+          });
+
+          if (rowsToExport.length === 0) {
+              setUploadLoading({ show: false, text: '', progress: 0 });
+              showToastNotification("Nenhum dado filtrado para exportar. (Sem pacientes processados na última planilha PEC)", "warning");
+              return;
+          }
+
+          setUploadLoading({ show: true, text: 'Montando e baixando Arquivo...', progress: 80 });
+          await new Promise(r => setTimeout(r, 100));
+
+          try {
+              const worksheet = XLSX.utils.json_to_sheet(rowsToExport, { header: EXCEL_COLUMNS_TARGET });
+              const workbook = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(workbook, worksheet, "Painel PEC");
+              XLSX.writeFile(workbook, `Exportacao_Estilo_PEC_PONTOS_${new Date().toISOString().slice(0, 10)}.xlsx`);
+              showToastNotification("Planilha exportada com sucesso!", "success");
+          } catch (e) {
+              showToastNotification("Falha ao exportar planilha Excel.", "error");
+              console.error(e);
+          }
+
+          setUploadLoading({ show: false, text: '', progress: 0 });
+      };
+
+      const handleExportTicketsExcel = () => {
+        showToastNotification("Gerando planilha de auditoria por tickets...", "info");
+        const tickets = [];
+        
+        tableFilteredPatients.forEach(p => {
+          const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+          coreInds.forEach(ind => {
+            const audit = p.recommendations?.[latestPecBucket]?.[ind];
+            if (!audit) return;
+            
+            if (audit.gains && audit.gains.length > 0) {
+              audit.gains.forEach(g => {
+                tickets.push({
+                  'Equipe': p.equipe || "Sem Equipe", 'Microárea': p.microarea || "XX", 'Data Referência': latestPecBucket,
+                  'Nome do Paciente': p.nomePec || p.nomeSiaps || "Paciente Sem Nome", 'Idade': p.idade && p.idade !== "N/I" ? `${p.idade} anos` : 'N/I',
+                  'CPF/CNS': p.cpf !== "N/I" ? p.cpf : p.cns, 'Endereço': p.endereco, 'Indicador': ind, 'Item do Indicador': g.item,
+                  'Pontos (Peso Item)': g.pts, 'Tipo de Movimentação': 'GANHO', 'Motivo / Detalhes': g.reason || g.desc
+                });
+              });
+            }
+            if (audit.losses && audit.losses.length > 0) {
+              audit.losses.forEach(l => {
+                tickets.push({
+                  'Equipe': p.equipe || "Sem Equipe", 'Microárea': p.microarea || "XX", 'Data Referência': latestPecBucket,
+                  'Nome do Paciente': p.nomePec || p.nomeSiaps || "Paciente Sem Nome", 'Idade': p.idade && p.idade !== "N/I" ? `${p.idade} anos` : 'N/I',
+                  'CPF/CNS': p.cpf !== "N/I" ? p.cpf : p.cns, 'Endereço': p.endereco, 'Indicador': ind, 'Item do Indicador': l.item,
+                  'Pontos (Peso Item)': l.pts, 'Tipo de Movimentação': 'PERDA', 'Motivo / Detalhes': l.reason || l.desc
+                });
+              });
+            }
+          });
+        });
+        
+        if (tickets.length === 0) { showToastNotification("Nenhum ticket de ganho/perda localizado com os filtros atuais.", "info"); return; }
+        
+        try {
+          const worksheet = XLSX.utils.json_to_sheet(tickets);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "Auditoria de GAPs");
+          const maxProps = [];
+          tickets.forEach(row => { Object.keys(row).forEach((key, colIdx) => { const maxLen = Math.max(String(row[key] || '').length, String(key).length); maxProps[colIdx] = Math.max(maxProps[colIdx] || 10, maxLen); }); });
+          worksheet['!cols'] = maxProps.map(w => ({ wch: w + 3 }));
+          XLSX.writeFile(workbook, `Auditoria_Granular_GAPs_${latestPecBucket}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+          showToastNotification("Planilha de Auditoria salva!", "success");
+        } catch (e) {
+          showToastNotification("Falha ao emitir a planilha.", "error");
+        }
+      };
+
+      const handleExportHTML = () => {
+        showToastNotification("Gerando Relatório HTML (Aguarde...)", "info");
+        const patientsToExport = tableFilteredPatients;
+
+        const groupedData = {};
+        patientsToExport.forEach(p => {
+          const eq = p.equipe || "Sem Equipe"; const ma = p.microarea || "XX"; const key = `${eq}__${ma}`;
+          if (!groupedData[key]) groupedData[key] = { equipe: eq, microarea: ma, patients: [] };
+          groupedData[key].patients.push(p);
+        });
+
+        // ORDENAÇÃO DOS GRUPOS (Equipe -> Microárea numérico)
+        const groups = Object.values(groupedData).sort((a, b) => {
+            if (a.equipe !== b.equipe) return String(a.equipe).localeCompare(String(b.equipe), 'pt-BR', { numeric: true });
+            return String(a.microarea).localeCompare(String(b.microarea), 'pt-BR', { numeric: true });
+        });
+
+        if (groups.length === 0) { showToastNotification("Nenhum dado filtrado para exportar.", "error"); return; }
+
+        let filterNames = [];
+        if (activeAuditFilter !== 'todos') {
+            const map = {
+                'ganhou_pec_no_siaps': 'Ganhos',
+                'perdeu_x': 'Perdas/Quedas',
+                'para_perder_x': 'Metas Parciais',
+                'sem_visita': 'Sem Visita ACS',
+                'bolsa_familia': 'Bolsa Família'
+            };
+            if(map[activeAuditFilter]) filterNames.push(map[activeAuditFilter]);
+        }
+        if (patientIndicatorFilter !== 'TODAS') filterNames.push(`Ind. ${patientIndicatorFilter}`);
+        if (searchQuery) filterNames.push(`Busca: "${searchQuery}"`);
+        
+        const appliedFiltersStr = filterNames.length > 0 ? filterNames.join(' | ') : 'Nenhum (Todos)';
+
+        let fullHTML = '';
+        groups.forEach((group, index) => {
+          
+          // ORDENAÇÃO DOS PACIENTES DENTRO DO GRUPO (Endereço numérico)
+          group.patients.sort((a, b) => {
+             return compareEnderecos(a.endereco, b.endereco);
+          });
+
+          const pageBreakHTML = index > 0 ? `<div class="page-break" style="page-break-before: always; margin-top: 30px;"></div>` : '';
+          
+          let groupHTML = `
+            ${pageBreakHTML}
+            <div style="width: 100%; box-sizing: border-box; margin-bottom: 25px; color: #000000; background-color: #ffffff;">
+              <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; page-break-after: avoid; border-left: 4px solid #1e3a8a;">
+                <div>
+                  <h1 style="font-size: 20px; font-weight: 900; margin: 0; color: #1e3a8a; text-transform: uppercase; letter-spacing: -0.5px;">Roteiro de Trabalho de Campo - USF</h1>
+                  <p style="font-size: 14px; margin: 6px 0 0 0; color: #0f172a; font-weight: 800; text-transform: uppercase;">EQUIPE: ${group.equipe} &nbsp;|&nbsp; MICROAREA: ${group.microarea}</p>
+                </div>
+                <div style="text-align: right; font-size: 10px; font-family: monospace; color: #475569; line-height: 1.4;">
+                  <div style="background-color: #e0e7ff; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 5px; border: 1px solid #c7d2fe;">
+                      <span style="font-weight: 900; color: #3730a3; font-size: 11px;">DATA DE REFERÊNCIA DA FONTE: ${latestPecBucket}</span>
+                  </div>
+                  <br/>
+                  <span>Emitido em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</span><br/>
+                  <span style="font-weight: bold;">Universo: ${baseFilter === 'pura' ? 'Todos' : baseFilter === 'sincronizada' ? 'Sincronizados' : 'Nao Sincronizados'}</span><br/>
+                  <span style="font-weight: bold; color: #b91c1c;">Filtros Ativos: ${appliedFiltersStr}</span>
+                </div>
+              </div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
+                <thead style="display: table-header-group;">
+                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #0f172a; font-weight: 800; text-transform: uppercase; font-size: 9px; color: #334155; page-break-inside: avoid;">
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 5%;">Sinc</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 8%;">Eq/MA</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 14%;">Paciente</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 4%;">Idade</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 11%;">CPF/CNS</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 15%;">Endereco</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 7%;">Comorb.</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 26%;">Pendencias Visita (X SIAPS)</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 10%;">Ult. Visita</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          group.patients.forEach(p => {
+            const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+            const hasSiaps = coreInds.some(ind => p.bp?.['SIAPS']?.[ind] !== undefined);
+            const hasPec = coreInds.some(ind => ['W1','W2','W3','W4'].some(bucket => p.bp?.[bucket]?.[ind] !== undefined));
+            
+            let syncText = "Sinc."; if (!hasSiaps && hasPec) syncText = "So PEC"; if (hasSiaps && !hasPec) syncText = "So SIAPS";
+            const formattedName = `${p.bolsaFamilia ? "[BF] " : ""}${(p.nomePec || p.nomeSiaps || "Sem Nome").toUpperCase()}`;
+            const identifier = p.cpf !== "N/I" ? p.cpf : p.cns;
+            
+            let pendingHtml = '';
+            coreInds.forEach((ind) => {
+              const recs = p.recommendations?.[latestPecBucket]?.[ind];
+              if (!recs) return;
+              
+              const auditText = p.audits?.[latestPecBucket]?.[ind] || p.audits?.['SIAPS']?.[ind];
+
+              const visitPendings = (recs.pending || []).filter(x => VISIT_ITEMS_MAP[ind]?.includes(x.item));
+              visitPendings.forEach(x => {
+                const hasSiapsX = p.bp?.['SIAPS']?.[ind]?.[x.item] ? "SIM" : "NAO";
+                const siapsColor = hasSiapsX === "SIM" ? "#16a34a" : "#475569";
+                pendingHtml += `
+                    <div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 0.5px dotted #cbd5e1;">
+                        <strong style="color: #b91c1c; font-size: 9px;">[${ind}]</strong> <span style="font-size: 8.5px; color: #000;">${x.desc}</span>
+                        ${x.warning ? `<div style="margin-top: 1px; font-size: 8px; font-weight: bold; color: #b91c1c;">${x.warning}</div>` : ''}
+                        <div style="margin-top: 2px; font-size: 8px; font-weight: bold; color: ${siapsColor};">X no SIAPS: ${hasSiapsX}</div>
+                    </div>`;
+              });
+
+              const visitMaintained = (recs.maintained || []).filter(x => VISIT_ITEMS_MAP[ind]?.includes(x.item) && x.warning);
+              visitMaintained.forEach(x => {
+                const hasSiapsX = p.bp?.['SIAPS']?.[ind]?.[x.item] ? "SIM" : "NAO";
+                const siapsColor = hasSiapsX === "SIM" ? "#16a34a" : "#475569";
+                pendingHtml += `
+                    <div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 0.5px dotted #cbd5e1;">
+                        <strong style="color: #d97706; font-size: 9px;">[${ind}]</strong> <span style="font-size: 8.5px; color: #000;">${x.desc}</span>
+                        <div style="margin-top: 1px; font-size: 8px; color: #b91c1c;">${x.warning}</div>
+                        <div style="margin-top: 2px; font-size: 8px; font-weight: bold; color: ${siapsColor};">X no SIAPS: ${hasSiapsX}</div>
+                    </div>`;
+              });
+              
+              if (auditText && auditText.trim() !== '') {
+                  pendingHtml += `
+                  <div style="margin-top: 4px; padding-top: 4px; border-top: 0.5px dotted #cbd5e1; background-color: #f8fafc; padding: 4px;">
+                      <strong style="color: #475569; font-size: 8px; text-transform: uppercase;">[${ind}] Info Auditoria (Planilha):</strong>
+                      <div style="font-size: 8px; color: #334155; margin-top: 2px;">${auditText}</div>
+                  </div>`;
+              }
+            });
+
+            if (!pendingHtml) pendingHtml = `<span style="color: #16a34a; font-weight: bold; font-size: 9px;">Visitas em dia</span>`;
+
+            groupHTML += `
+              <tr style="border-bottom: 1px solid #cbd5e1; page-break-inside: avoid !important; break-inside: avoid !important;">
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; color: #000000;">${syncText}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; color: #000000;">${p.equipe}<br/>MA: ${p.microarea === "XX" ? "XX" : p.microarea}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; word-wrap: break-word; white-space: normal; color: #000000;">${formattedName}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; vertical-align: top; color: #000000; font-size: 9px;">${p.idade && p.idade !== "N/I" ? p.idade : 'N/I'}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 8.5px; vertical-align: top; color: #000000;">${identifier}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 8.5px; vertical-align: top; word-wrap: break-word; white-space: normal; color: #000000;">${p.endereco}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; font-weight: bold; color: #1e40af; vertical-align: top; word-wrap: break-word; white-space: normal;">${coreInds.join(', ')}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; vertical-align: top; background-color: #fef2f2; word-wrap: break-word; white-space: normal; color: #000000;">${pendingHtml}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; font-weight: bold; vertical-align: top; color: #000000;">${p.ultimaVisitaACS && p.ultimaVisitaACS !== "Sem registro" ? p.ultimaVisitaACS.split('-').reverse().join('/') : "Sem Reg."}</td>
+              </tr>
+            `;
+          });
+          groupHTML += `</tbody></table></div>`;
+          fullHTML += groupHTML;
+        });
+
+        const finalWrappedHTML = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Roteiro de Campo ACS</title>
+    <style>
+        @media print {
+            .page-break { page-break-before: always; }
+            body { margin: 0; padding: 0; background-color: white; }
+            .no-print { display: none; }
+        }
+        body { font-family: Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #0f172a; }
+        .container { max-width: 1400px; margin: 0 auto; background-color: #ffffff; padding: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-radius: 8px; }
+        .print-btn { background-color: #16a34a; color: white; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; margin-bottom: 20px; }
+        .print-btn:hover { background-color: #15803d; }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center;">
+        <button class="print-btn" onclick="window.print()">[Imprimir / Salvar como PDF]</button>
+    </div>
+    <div class="container">
+        ${fullHTML}
+    </div>
+</body>
+</html>
+        `;
+
+        const blob = new Blob([finalWrappedHTML], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ACS_Roteiro_${new Date().toISOString().slice(0,10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToastNotification("Relatório HTML emitido com sucesso!", "success");
+        setAppLogs(logs => [{ time: new Date().toLocaleTimeString(), type: 'SUCCESS', msg: 'Roteiro HTML (Pronto para impressão) exportado com sucesso.' }, ...logs]);
+      };
+
+      const handleExportExamesHTML = () => {
+        showToastNotification("Gerando Relatório de Exames (Aguarde...)", "info");
+        const patientsToExport = examesFilteredPatients;
+
+        if (patientsToExport.length === 0) {
+            showToastNotification("Nenhum dado filtrado para exportar.", "error");
+            return;
+        }
+
+        // Agrupamento por Equipe e Microárea
+        const groupedData = {};
+        patientsToExport.forEach(p => {
+          const eq = p.equipe || "Sem Equipe"; const ma = p.microarea || "XX"; const key = `${eq}__${ma}`;
+          if (!groupedData[key]) groupedData[key] = { equipe: eq, microarea: ma, patients: [] };
+          groupedData[key].patients.push(p);
+        });
+
+        // Ordenação dos grupos (Equipe -> Microárea numérico)
+        const groups = Object.values(groupedData).sort((a, b) => {
+            if (a.equipe !== b.equipe) return String(a.equipe).localeCompare(String(b.equipe), 'pt-BR', { numeric: true });
+            return String(a.microarea).localeCompare(String(b.microarea), 'pt-BR', { numeric: true });
+        });
+
+        // Nomes dos filtros
+        let filtroExames = selectedExameTypes.length > 0
+            ? selectedExameTypes.map(v => v === 'C4-E' ? 'Hemo. Glicada' : v === 'C7-A' ? 'Colo do Útero' : 'Mamografia').join(', ')
+            : 'Todos os Exames';
+        let filtroStatus = statusExameFilter;
+
+        let fullHTML = '';
+        groups.forEach((group, index) => {
+          
+          // Ordenação dos pacientes (Endereço numérico, 102 > 8)
+          group.patients.sort((a, b) => compareEnderecos(a.endereco, b.endereco));
+
+          const pageBreakHTML = index > 0 ? `<div class="page-break" style="page-break-before: always; margin-top: 30px;"></div>` : '';
+
+          let groupHTML = `
+            ${pageBreakHTML}
+            <div style="width: 100%; box-sizing: border-box; margin-bottom: 25px; color: #000000; background-color: #ffffff;">
+              <div style="background-color: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; page-break-after: avoid; border-left: 4px solid #d97706;">
+                <div>
+                  <h1 style="font-size: 20px; font-weight: 900; margin: 0; color: #b45309; text-transform: uppercase; letter-spacing: -0.5px;">Painel de Exames Monitorados</h1>
+                  <p style="font-size: 14px; margin: 6px 0 0 0; color: #0f172a; font-weight: 800; text-transform: uppercase;">EQUIPE: ${group.equipe} &nbsp;|&nbsp; MICROAREA: ${group.microarea}</p>
+                </div>
+                <div style="text-align: right; font-size: 10px; font-family: monospace; color: #475569; line-height: 1.4;">
+                  <div style="background-color: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 5px; border: 1px solid #fde68a;">
+                      <span style="font-weight: 900; color: #b45309; font-size: 11px;">DATA DE REFERÊNCIA DA FONTE: ${latestPecBucket}</span>
+                  </div>
+                  <br/>
+                  <span>Emitido em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</span><br/>
+                  <span style="font-weight: bold;">Universo: ${baseFilter === 'pura' ? 'Todos' : baseFilter === 'sincronizada' ? 'Sincronizados' : 'Nao Sincronizados'}</span><br/>
+                  <span style="font-weight: bold; color: #b91c1c;">Filtros: Exames (${filtroExames}) | Status (${filtroStatus})</span>
+                </div>
+              </div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
+                <thead style="display: table-header-group;">
+                  <tr style="background-color: #f1f5f9; border-bottom: 2px solid #0f172a; font-weight: 800; text-transform: uppercase; font-size: 9px; color: #334155; page-break-inside: avoid;">
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 5%;">Sinc</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 8%;">Eq/MA</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 14%;">Paciente</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 4%;">Idade</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 11%;">CPF/CNS</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 15%;">Endereço</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 7%;">Comorb.</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 26%; background-color: #fef3c7;">Status / Auditoria dos Exames</th>
+                    <th style="padding: 8px 6px; border: 1px solid #cbd5e1; width: 10%;">Últ. Visita</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          group.patients.forEach(p => {
+            const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+            const hasSiaps = coreInds.some(ind => p.bp?.['SIAPS']?.[ind] !== undefined);
+            const hasPec = coreInds.some(ind => ['W1','W2','W3','W4'].some(bucket => p.bp?.[bucket]?.[ind] !== undefined));
+
+            let syncText = "Sinc."; if (!hasSiaps && hasPec) syncText = "Só PEC"; if (hasSiaps && !hasPec) syncText = "Só SIAPS";
+            const formattedName = `${p.bolsaFamilia ? "[BF] " : ""}${(p.nomePec || p.nomeSiaps || "Sem Nome").toUpperCase()}`;
+            const identifier = p.cpf !== "N/I" ? p.cpf : p.cns;
+
+            let examesHtml = '';
+            const showAll = selectedExameTypes.length === 0;
+
+            const buildExamHtml = (ind, item, title, dateField) => {
+                const isNa = p.bp?.['SIAPS']?.[ind]?.[item] === 'NA' || p.bp?.[latestPecBucket]?.[ind]?.[item] === 'NA';
+                if (isNa) return;
+
+                const hasPecItem = p.bp?.[latestPecBucket]?.[ind]?.[item] === true;
+                const hasSiapsItem = p.bp?.['SIAPS']?.[ind]?.[item] === true;
+                const status = (hasPecItem || hasSiapsItem) ? 'OK' : 'PENDENTES';
+
+                if (statusExameFilter !== 'TODOS' && statusExameFilter !== status) return;
+
+                const statusColor = status === 'OK' ? '#16a34a' : '#b91c1c';
+                const rawDate = dateField ? p.dataExecucoes?.[dateField] : null;
+                const formattedDate = (rawDate && rawDate !== "Sem registro" && rawDate !== "-") ? rawDate.split('-').reverse().join('/') : "S/D";
+                
+                const auditText = p.audits?.[latestPecBucket]?.[ind] || p.audits?.['SIAPS']?.[ind];
+                const intMedStr = p.intMed && p.intMed !== "Sem registro" ? (p.intMed.includes('-') ? p.intMed.split('-').reverse().join('/') : p.intMed) : "Sem registro";
+                const intEnfStr = p.intEnf && p.intEnf !== "Sem registro" ? (p.intEnf.includes('-') ? p.intEnf.split('-').reverse().join('/') : p.intEnf) : "Sem registro";
+
+                examesHtml += `
+                    <div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 0.5px dotted #cbd5e1;">
+                        <strong style="color: #b45309; font-size: 9px;">[${ind}-${item}]</strong> <span style="font-size: 8.5px; color: #000; font-weight: bold;">${title}</span>
+                        <div style="margin-top: 2px; font-size: 8.5px; font-weight: bold; color: ${statusColor};">Status: ${status} | PEC: ${hasPecItem?'SIM':'NÃO'} | SIAPS: ${hasSiapsItem?'SIM':'NÃO'}</div>
+                        ${auditText && auditText.trim() !== '' ? `<div style="margin-top: 3px; font-size: 8px; color: #334155; background-color: #f1f5f9; padding: 3px; border-radius: 2px;"><strong>Auditoria (Planilha):</strong> ${auditText}</div>` : ''}
+                        <div style="margin-top: 3px; font-size: 8px; color: #475569; display: flex; gap: 10px;">
+                            <span><strong>Médico:</strong> ${intMedStr}</span>
+                            <span><strong>Enf:</strong> ${intEnfStr}</span>
+                        </div>
+                        ${dateField ? `<div style="font-size: 8px; color: #475569; margin-top: 2px;">Data Ref: ${formattedDate}</div>` : ''}
+                    </div>`;
+            };
+
+            if ((showAll || selectedExameTypes.includes('C4-E')) && p.indicadores?.includes('C4')) {
+                buildExamHtml('C4', 'E', 'Hemo. Glicada', 'hemo');
+            }
+            if ((showAll || selectedExameTypes.includes('C7-A')) && p.indicadores?.includes('C7')) {
+                buildExamHtml('C7', 'A', 'Citopatológico (Colo)', 'exameColo');
+            }
+            if ((showAll || selectedExameTypes.includes('C7-D')) && p.indicadores?.includes('C7')) {
+                buildExamHtml('C7', 'D', 'Mamografia', null);
+            }
+
+            if (!examesHtml) examesHtml = `<span style="color: #475569; font-style: italic; font-size: 8.5px;">Sem exames filtrados.</span>`;
+
+            groupHTML += `
+              <tr style="border-bottom: 1px solid #cbd5e1; page-break-inside: avoid !important; break-inside: avoid !important;">
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; color: #000000;">${syncText}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; color: #000000;">${p.equipe}<br/>MA: ${p.microarea === "XX" ? "XX" : p.microarea}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 9px; vertical-align: top; word-wrap: break-word; white-space: normal; color: #000000;">${formattedName}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; vertical-align: top; color: #000000; font-size: 9px;">${p.idade && p.idade !== "N/I" ? p.idade : 'N/I'}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 8.5px; vertical-align: top; color: #000000;">${identifier}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 8.5px; vertical-align: top; word-wrap: break-word; white-space: normal; color: #000000;">${p.endereco}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; font-weight: bold; color: #1e40af; vertical-align: top; word-wrap: break-word; white-space: normal;">${coreInds.join(', ')}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; vertical-align: top; background-color: #fffbeb; word-wrap: break-word; white-space: normal; color: #000000;">${examesHtml}</td>
+                <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-size: 9px; font-weight: bold; vertical-align: top; color: #000000;">${p.ultimaVisitaACS && p.ultimaVisitaACS !== "Sem registro" ? p.ultimaVisitaACS.split('-').reverse().join('/') : "Sem Reg."}</td>
+              </tr>
+            `;
+          });
+          groupHTML += `</tbody></table></div>`;
+          fullHTML += groupHTML;
+        });
+
+        const finalWrappedHTML = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Exames Monitorados</title>
+    <style>
+        @media print {
+            .page-break { page-break-before: always; }
+            body { margin: 0; padding: 0; background-color: white; }
+            .no-print { display: none; }
+        }
+        body { font-family: Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #0f172a; }
+        .container { max-width: 1400px; margin: 0 auto; background-color: #ffffff; padding: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-radius: 8px; }
+        .print-btn { background-color: #d97706; color: white; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; margin-bottom: 20px; }
+        .print-btn:hover { background-color: #b45309; }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center;">
+        <button class="print-btn" onclick="window.print()">[Imprimir / Salvar como PDF]</button>
+    </div>
+    <div class="container">
+        ${fullHTML}
+    </div>
+</body>
+</html>
+        `;
+
+        const blob = new Blob([finalWrappedHTML], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Relatorio_Exames_${new Date().toISOString().slice(0,10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToastNotification("Relatório HTML emitido com sucesso!", "success");
+        setAppLogs(logs => [{ time: new Date().toLocaleTimeString(), type: 'SUCCESS', msg: 'Relatório de Exames HTML (Pronto para impressão) exportado com sucesso.' }, ...logs]);
+      };
+
+      const uniqueTeams = useMemo(() => {
+        const t = new Set(); patientsData.forEach(p => { if (p.equipe && p.equipe !== "Sem Equipe") t.add(p.equipe); });
+        return ['Todas', ...Array.from(t).sort()];
+      }, [patientsData]);
+
+      const uniqueMicroareas = useMemo(() => {
+        const m = new Set(); patientsData.forEach(p => { m.add(p.microarea || "XX"); });
+        return Array.from(m).sort((a,b) => {
+          if (a === "XX") return 1; if (b === "XX") return -1;
+          return Number(a) - Number(b);
+        });
+      }, [patientsData]);
+
+      const baseFilteredPatients = useMemo(() => {
+        return patientsData.filter(p => {
+          if (selectedTeam !== 'Todas' && p.equipe !== selectedTeam) return false;
+          if (selectedMicroareas.length > 0 && !selectedMicroareas.includes(String(p.microarea || "XX"))) return false;
+          
+          const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+          if (coreInds.length === 0) return false;
+
+          const isFullySincronizado = coreInds.every(ind => {
+              const inSiaps = p.bp?.['SIAPS']?.[ind] !== undefined;
+              const inPec = ['W1','W2','W3','W4'].some(bucket => p.bp?.[bucket]?.[ind] !== undefined);
+              return inSiaps && inPec;
+          });
+
+          if (baseFilter === 'sincronizada' && !isFullySincronizado) return false;
+          if (baseFilter === 'nao_sincronizada' && isFullySincronizado) return false;
+          return true;
+        });
+      }, [patientsData, selectedTeam, selectedMicroareas, baseFilter]);
+
+      const countPura = useMemo(() => patientsData.filter(p => (selectedTeam === 'Todas' || p.equipe === selectedTeam) && (selectedMicroareas.length === 0 || selectedMicroareas.includes(String(p.microarea || "XX"))) && p.indicadores?.some(ind => CORE_INDICATORS.includes(ind))).length, [patientsData, selectedTeam, selectedMicroareas]);
+      const countSincronizada = useMemo(() => patientsData.filter(p => {
+        if ((selectedTeam !== 'Todas' && p.equipe !== selectedTeam) || (selectedMicroareas.length > 0 && !selectedMicroareas.includes(String(p.microarea || "XX")))) return false;
+        const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+        if (coreInds.length === 0) return false;
+        
+        return coreInds.every(ind => {
+            const inSiaps = p.bp?.['SIAPS']?.[ind] !== undefined;
+            const inPec = ['W1','W2','W3','W4'].some(b => p.bp?.[b]?.[ind] !== undefined);
+            return inSiaps && inPec;
+        });
+      }).length, [patientsData, selectedTeam, selectedMicroareas]);
+      const countNaoSincronizada = countPura - countSincronizada;
+
+      const preAuditPatients = useMemo(() => {
+          return baseFilteredPatients.filter(p => {
+              if (patientIndicatorFilter !== 'TODAS' && p.indicadores && !p.indicadores.includes(patientIndicatorFilter)) return false;
+              
+              if (searchQuery.trim() !== '') {
+                  const q = searchQuery.toLowerCase();
+                  return (p.nomePec && p.nomePec.toLowerCase().includes(q)) || 
+                         (p.nomeSiaps && p.nomeSiaps.toLowerCase().includes(q)) || 
+                         p.cpf.includes(q) || 
+                         p.cns.includes(q) ||
+                         (p.endereco && p.endereco.toLowerCase().includes(q));
+              }
+              return true;
+          });
+      }, [baseFilteredPatients, patientIndicatorFilter, searchQuery]);
+
+      const auditCounts = useMemo(() => {
+          const counts = { todos: preAuditPatients.length, ganhou_pec_no_siaps: 0, perdeu_x: 0, para_perder_x: 0, sem_visita: 0, bolsa_familia: 0 };
+          preAuditPatients.forEach(p => {
+             if (p.bolsaFamilia) counts.bolsa_familia++;
+             if (p.audit_eval) {
+               if (p.audit_eval.hasGain) counts.ganhou_pec_no_siaps++;
+               if (p.audit_eval.hasLoss) counts.perdeu_x++;
+               if (p.audit_eval.hasParcial) counts.para_perder_x++;
+               if (p.audit_eval.isSemVisita) counts.sem_visita++;
+             }
+          });
+          return counts;
+      }, [preAuditPatients, latestPecBucket]);
+
+      const tableFilteredPatients = useMemo(() => {
+        const filtered = preAuditPatients.filter(p => {
+          if (activeAuditFilter !== 'todos') {
+              if (activeAuditFilter === 'ganhou_pec_no_siaps' && !p.audit_eval?.hasGain) return false;
+              if (activeAuditFilter === 'perdeu_x' && !p.audit_eval?.hasLoss) return false;
+              if (activeAuditFilter === 'para_perder_x' && !p.audit_eval?.hasParcial) return false;
+              if (activeAuditFilter === 'sem_visita' && !p.audit_eval?.isSemVisita) return false;
+              if (activeAuditFilter === 'bolsa_familia' && !p.bolsaFamilia) return false;
+          }
+          return true;
+        });
+
+        return filtered.sort((a, b) => {
+          const eqA = String(a.equipe || "Sem Equipe").trim(); const eqB = String(b.equipe || "Sem Equipe").trim();
+          if (eqA !== eqB) return eqA === "Sem Equipe" ? 1 : eqB === "Sem Equipe" ? -1 : eqA.localeCompare(eqB);
+          const maA = isNaN(parseInt(a.microarea, 10)) ? 999999 : parseInt(a.microarea, 10);
+          const maB = isNaN(parseInt(b.microarea, 10)) ? 999999 : parseInt(b.microarea, 10);
+          if (maA !== maB) return maA - maB;
+          return compareEnderecos(a.endereco, b.endereco);
+        });
+      }, [preAuditPatients, activeAuditFilter, latestPecBucket]);
+
+      // Filtragem da nova aba de EXAMES
+      const examesFilteredPatients = useMemo(() => {
+        return baseFilteredPatients.filter(p => {
+            // Aplica filtro de busca geral primeiro
+            if (searchQuery.trim() !== '') {
+                const q = searchQuery.toLowerCase();
+                if (!(p.nomePec && p.nomePec.toLowerCase().includes(q)) && 
+                    !(p.nomeSiaps && p.nomeSiaps.toLowerCase().includes(q)) && 
+                    !p.cpf.includes(q) && 
+                    !p.cns.includes(q) &&
+                    !(p.endereco && p.endereco.toLowerCase().includes(q))) {
+                    return false;
+                }
+            }
+
+            let hasEligibleExame = false;
+            const showAll = selectedExameTypes.length === 0;
+
+            const checkExamMatch = (ind, item) => {
+                const isNa = p.bp?.['SIAPS']?.[ind]?.[item] === 'NA' || p.bp?.[latestPecBucket]?.[ind]?.[item] === 'NA';
+                if (isNa) return false;
+                
+                const hasPec = p.bp?.[latestPecBucket]?.[ind]?.[item] === true;
+                const hasSiaps = p.bp?.['SIAPS']?.[ind]?.[item] === true;
+                const status = (hasPec || hasSiaps) ? 'OK' : 'PENDENTES';
+                
+                if (statusExameFilter !== 'TODOS' && statusExameFilter !== status) return false;
+                return true;
+            };
+
+            if ((showAll || selectedExameTypes.includes('C4-E')) && p.indicadores?.includes('C4')) {
+                if (checkExamMatch('C4', 'E')) hasEligibleExame = true;
+            }
+            if ((showAll || selectedExameTypes.includes('C7-A')) && p.indicadores?.includes('C7')) {
+                if (checkExamMatch('C7', 'A')) hasEligibleExame = true;
+            }
+            if ((showAll || selectedExameTypes.includes('C7-D')) && p.indicadores?.includes('C7')) {
+                if (checkExamMatch('C7', 'D')) hasEligibleExame = true;
+            }
+
+            return hasEligibleExame;
+        }).sort((a,b) => {
+            const eqA = String(a.equipe || "Sem Equipe").trim(); const eqB = String(b.equipe || "Sem Equipe").trim();
+            if (eqA !== eqB) return eqA === "Sem Equipe" ? 1 : eqB === "Sem Equipe" ? -1 : eqA.localeCompare(eqB);
+            const maA = isNaN(parseInt(a.microarea, 10)) ? 999999 : parseInt(a.microarea, 10);
+            const maB = isNaN(parseInt(b.microarea, 10)) ? 999999 : parseInt(b.microarea, 10);
+            if (maA !== maB) return maA - maB;
+            return compareEnderecos(a.endereco, b.endereco);
+        });
+      }, [baseFilteredPatients, selectedExameTypes, statusExameFilter, searchQuery, latestPecBucket]);
+
+      
+      useEffect(() => setCurrentPagePats(1), [searchQuery, patientIndicatorFilter, activeAuditFilter, selectedTeam, selectedMicroareas, baseFilter]);
+      useEffect(() => setCurrentPageRot(1), [searchQuery, activeAuditFilter, selectedTeam, selectedMicroareas, baseFilter]);
+      useEffect(() => setCurrentPageExames(1), [searchQuery, selectedExameTypes, statusExameFilter, selectedTeam, selectedMicroareas, baseFilter]);
+      
+      const pagedPatients = useMemo(() => {
+          const start = (currentPagePats - 1) * rowsPerPage;
+          return tableFilteredPatients.slice(start, start + rowsPerPage);
+      }, [tableFilteredPatients, currentPagePats]);
+      
+      const pagedRoteiro = useMemo(() => {
+          const start = (currentPageRot - 1) * rowsPerPage;
+          return tableFilteredPatients.slice(start, start + rowsPerPage);
+      }, [tableFilteredPatients, currentPageRot]);
+
+      const pagedExames = useMemo(() => {
+          const start = (currentPageExames - 1) * rowsPerPage;
+          return examesFilteredPatients.slice(start, start + rowsPerPage);
+      }, [examesFilteredPatients, currentPageExames]);
+
+      const globalWeeklyStats = useMemo(() => {
+        return BUCKETS.map(b => {
+          let totalScore = 0;
+          let patientSet = new Set();
+
+          CORE_INDICATORS.forEach(ind => {
+            let indSum = 0;
+            let indCount = 0;
+            baseFilteredPatients.forEach(p => {
+              if (p.indicadores && p.indicadores.includes(ind)) {
+                const scoreValue = p.scores?.[b]?.[ind];
+                if (scoreValue !== null && scoreValue !== undefined) {
+                  indSum += scoreValue;
+                  indCount++;
+                  patientSet.add(p.id);
+                }
+              }
+            });
+            const indAvg = indCount > 0 ? (indSum / indCount) : 0;
+            totalScore += indAvg;
+          });
+
+          return { bucket: b, avg: Math.round(totalScore / CORE_INDICATORS.length), count: patientSet.size };
+        });
+      }, [baseFilteredPatients]);
+
+      const uniqueIndicatorsInDataset = useMemo(() => {
+        const s = new Set(); patientsData.forEach(p => p.indicadores && p.indicadores.forEach(i => { if (CORE_INDICATORS.includes(i)) s.add(i); })); 
+        return Array.from(s).sort();
+      }, [patientsData]);
+
+      const renderFastSearchFilters = () => (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm animate-fade-in">
+          <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3">
+            <ShieldAlert className="h-3 w-3 text-amber-500" /> Filtros Assistenciais Rápidos (Pistas Clínicas)
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setActiveAuditFilter('todos')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${activeAuditFilter === 'todos' ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}>Exibir Todos ({auditCounts.todos})</button>
+            <button onClick={() => setActiveAuditFilter('ganhou_pec_no_siaps')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${activeAuditFilter === 'ganhou_pec_no_siaps' ? 'bg-emerald-600 text-white border-emerald-500 shadow-md' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}><ArrowUpCircle className="h-3.5 w-3.5" /> Ganhos ({auditCounts.ganhou_pec_no_siaps})</button>
+            <button onClick={() => setActiveAuditFilter('perdeu_x')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${activeAuditFilter === 'perdeu_x' ? 'bg-rose-600 text-white border-rose-500 shadow-md' : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'}`}>Perdas/Quedas ({auditCounts.perdeu_x})</button>
+            <button onClick={() => setActiveAuditFilter('para_perder_x')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${activeAuditFilter === 'para_perder_x' ? 'bg-orange-600 text-white border-orange-500 shadow-md' : 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100'}`}>Metas Parciais ({auditCounts.para_perder_x})</button>
+            <button onClick={() => setActiveAuditFilter('sem_visita')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${activeAuditFilter === 'sem_visita' ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-md' : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-100'}`}><UserMinus className="h-3.5 w-3.5" /> Sem Visita ACS ({auditCounts.sem_visita})</button>
+            <button onClick={() => setActiveAuditFilter('bolsa_familia')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${activeAuditFilter === 'bolsa_familia' ? 'bg-amber-600 text-white border-amber-500 shadow-md' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'}`}><Wallet className="h-3.5 w-3.5" /> Bolsa Família ({auditCounts.bolsa_familia})</button>
+          </div>
+        </div>
+      );
+
+      const renderDetailedSearchBar = () => (
+        <div className="bg-white border border-slate-200 p-4 rounded-xl flex flex-wrap gap-4 items-center animate-fade-in shadow-sm">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input type="text" placeholder="Buscar por Nome do PEC, CPF, CNS ou Rua..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+          </div>
+          <select value={patientIndicatorFilter} onChange={(e) => setPatientIndicatorFilter(e.target.value)} className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-medium">
+            <option value="TODAS">Todos Indicadores</option>
+            {uniqueIndicatorsInDataset.map(code => <option key={code} value={code}>{code}</option>)}
+          </select>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
+          
+          {/* Tela Modal de Upload / Carregamento Bloqueante */}
+          {uploadLoading.show && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col items-center justify-center transition-all duration-300">
+              <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md flex flex-col items-center animate-fade-in">
+                <div className="w-14 h-14 border-4 border-t-indigo-600 border-r-blue-600 border-b-slate-200 border-l-slate-200 rounded-full animate-spin mb-6"></div>
+                <h2 className="text-lg font-black text-slate-800 mb-2 text-center leading-tight">{uploadLoading.text}</h2>
+                <div className="w-full bg-slate-100 rounded-full h-2.5 mt-4 overflow-hidden border border-slate-200 relative">
+                   <div className="bg-indigo-600 h-full rounded-full transition-all duration-300 relative overflow-hidden" style={{width: `${uploadLoading.progress}%`}}>
+                       <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 animate-pulse"></div>
+                   </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-4 font-bold text-center uppercase tracking-widest">Processamento Intenso em Andamento...</p>
+              </div>
+            </div>
+          )}
+
+          {toast.show && (
+            <div className={`fixed bottom-5 right-5 z-[99999] flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl border animate-fade-in ${toast.type === 'error' ? 'bg-rose-100 border-rose-500 text-rose-800' : 'bg-white border-slate-200 text-slate-800'}`}>
+              <span className={`h-2.5 w-2.5 rounded-full ${toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'}`} />
+              <span className="text-xs font-semibold">{toast.message}</span>
+            </div>
+          )}
+
+          <header className="border-b border-slate-200 bg-white/90 backdrop-blur px-6 py-4 sticky top-0 z-40 shadow-sm">
+            <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-200"><Target className="h-5 w-5" /></div>
+                <div>
+                  <h1 className="text-base font-black flex items-center gap-2 tracking-tight text-slate-800">Monitor de GAPs USF</h1>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">Painel Analítico de Indicadores &bull; Previne Brasil</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 uppercase mr-1 ml-1">Upload:</span>
+                
+                <label className={`${uploadStatus['SIAPS'] ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-500'} text-white font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-sm`} title="Base Oficial do SIAPS (Alvo)">
+                  {uploadStatus['SIAPS'] ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> SIAPS OK</> : <><Upload className="h-3 w-3" /> SIAPS</>}
+                  <input type="file" multiple accept=".xlsx, .xls, .csv" onChange={(e) => handleExcelUpload(e, 'SIAPS')} className="hidden" />
+                </label>
+                
+                <div className="w-px h-5 bg-slate-300 mx-1 hidden sm:block"></div>
+                
+                <label className={`${uploadStatus['W1'] ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-sm`} title="Semana 1 do PEC">
+                  {uploadStatus['W1'] ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> W1 OK</> : 'W1'}
+                  <input type="file" multiple accept=".xlsx, .xls, .csv" onChange={(e) => handleExcelUpload(e, 'W1')} className="hidden" />
+                </label>
+                
+                <label className={`${uploadStatus['W2'] ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-sm`} title="Semana 2 do PEC">
+                  {uploadStatus['W2'] ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> W2 OK</> : 'W2'}
+                  <input type="file" multiple accept=".xlsx, .xls, .csv" onChange={(e) => handleExcelUpload(e, 'W2')} className="hidden" />
+                </label>
+
+                <label className={`${uploadStatus['W3'] ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-sm`} title="Semana 3 do PEC">
+                  {uploadStatus['W3'] ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> W3 OK</> : 'W3'}
+                  <input type="file" multiple accept=".xlsx, .xls, .csv" onChange={(e) => handleExcelUpload(e, 'W3')} className="hidden" />
+                </label>
+
+                <label className={`${uploadStatus['W4'] ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500'} text-white font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-sm`} title="Semana 4 do PEC">
+                  {uploadStatus['W4'] ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> W4 OK</> : 'W4'}
+                  <input type="file" multiple accept=".xlsx, .xls, .csv" onChange={(e) => handleExcelUpload(e, 'W4')} className="hidden" />
+                </label>
+                
+                <div className="w-px h-5 bg-slate-300 mx-1 hidden sm:block"></div>
+
+                <button onClick={handleClearMockData} className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-3 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1.5 transition-all border border-rose-200 shadow-sm ml-1" title="Zerar Banco de Dados">
+                  <Trash2 className="h-3 w-3" /> Limpar
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <nav className="bg-white border-b border-slate-200 px-6 mb-6">
+            <div className="max-w-[1400px] mx-auto flex gap-6 overflow-x-auto font-medium">
+              <button onClick={() => setActiveTab('indicators')} className={`py-4 text-xs uppercase tracking-widest font-black border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'indicators' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Activity className="h-4 w-4" /> Desempenho Global</button>
+              <button onClick={() => setActiveTab('patients')} className={`py-4 text-xs uppercase tracking-widest font-black border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'patients' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Users className="h-4 w-4" /> Lista Geral de GAPs ({preAuditPatients.length})</button>
+              <button onClick={() => setActiveTab('roteiro')} className={`py-4 text-xs uppercase tracking-widest font-black border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'roteiro' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><BookOpen className="h-4 w-4" /> 📋 Roteiro de Rua (ACS)</button>
+              <button onClick={() => setActiveTab('exames')} className={`py-4 text-xs uppercase tracking-widest font-black border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'exames' ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Microscope className="h-4 w-4" /> 🔬 [EXAMES]</button>
+              <button onClick={() => setActiveTab('logs')} className={`py-4 text-xs uppercase tracking-widest font-black border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'logs' ? 'border-slate-800 text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Terminal className="h-4 w-4" /> Logs & Python</button>
+            </div>
+          </nav>
+
+          <main className="max-w-[1400px] mx-auto px-6 space-y-6">
+            
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col gap-3 animate-fade-in relative z-20">
+              <div className="flex items-center justify-between w-full border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-1.5">
+                  <Search className="h-3.5 w-3.5 text-indigo-600" />
+                  <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Parâmetros de Territorialização</h3>
+                </div>
+                <div className="text-[9px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">
+                  Nota Sintética Ativa (Fórmula Linear)
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 relative pt-1">
+                <div className="sm:col-span-3 flex flex-col gap-1.5 relative z-10">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Equipe da USF (INE)</label>
+                  <select value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)} className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 relative">
+                    {uniqueTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                
+                <div className="sm:col-span-3 flex flex-col gap-1.5 relative z-30">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Microárea ACS (Filtro)</label>
+                  <MultiSelect options={uniqueMicroareas} selected={selectedMicroareas} onChange={setSelectedMicroareas} placeholder="Todas as Microáreas" />
+                </div>
+
+                <div className="sm:col-span-6 flex flex-col gap-1.5 relative z-10">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Universo de Amostragem (Origem)</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => setBaseFilter('pura')} className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${baseFilter === 'pura' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}>Todos ({countPura})</button>
+                    <button onClick={() => setBaseFilter('sincronizada')} className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${baseFilter === 'sincronizada' ? 'bg-emerald-600 border-emerald-600 text-white shadow-md' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>Sincronizados ({countSincronizada})</button>
+                    <button onClick={() => setBaseFilter('nao_sincronizada')} className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${baseFilter === 'nao_sincronizada' ? 'bg-orange-500 border-orange-500 text-white shadow-md' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}>Não Sinc. ({countNaoSincronizada})</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ABA DESEMPENHO GLOBAL */}
+            {activeTab === 'indicators' && (
+              <div className="space-y-4 animate-fade-in relative z-10">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6 border-b border-slate-100 pb-4">
+                    <div>
+                      <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Evolução do Desempenho Global</h2>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button onClick={handleGeneratePDFReport} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-2">
+                          <FileText className="w-4 h-4" /> 
+                          Relatório PDF (A4)
+                      </button>
+                      <button onClick={exportToExcel} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-2">
+                          <FileText className="w-4 h-4" /> 
+                          Gerar Planilha Pontos
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm mb-6 font-imprimir">
+                    <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                      <h4 className="text-[10px] font-black text-slate-700 leading-tight flex items-center gap-2 uppercase tracking-widest">
+                        <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[9px] font-bold shadow-sm">Média Global</span>
+                        Indicador de Síntese (Nota Final da Equipe)
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-500 font-bold">f = Σ(C2 a C7) / 6</span>
+                    </div>
+                    
+                    <div className="px-5 py-6 bg-white">
+                       <div className="flex gap-4 overflow-x-auto pb-2">
+                           {globalWeeklyStats.map(s => (
+                               <div key={s.bucket} className={`flex-1 min-w-[120px] rounded-xl p-5 flex flex-col items-center justify-center border transition-all ${s.bucket === latestPecBucket ? 'bg-indigo-50 border-indigo-200 shadow-md transform scale-105' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                   <span className={`text-2xl md:text-3xl font-black leading-none ${s.bucket === latestPecBucket ? 'text-indigo-600' : 'text-slate-700'}`}>
+                                     {s.count > 0 || s.bucket === 'SIAPS' ? `${s.avg}%` : '-'}
+                                   </span>
+                                   <span className="text-[9px] font-black uppercase text-slate-500 mt-2 tracking-wider">{s.bucket === 'SIAPS' ? 'SIAPS (Base)' : s.bucket.replace('W', 'Semana ')}</span>
+                                   <span className="text-[9px] text-slate-400 mt-0.5 font-bold">
+                                     {s.count > 0 || s.bucket === 'SIAPS' ? `${s.count} Alvos Ativos` : 'Pendente'}
+                                   </span>
+                               </div>
+                           ))}
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-6 bg-slate-50 p-2 rounded-xl border border-slate-200 no-pdf">
+                    <span className="text-[9px] font-black text-slate-500 uppercase ml-2 mr-1">Filtrar Visão:</span>
+                    <button onClick={() => setActiveIndicatorView('TODOS')} className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-widest transition-all shadow-sm ${activeIndicatorView === 'TODOS' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'}`}>TODOS</button>
+                    {CORE_INDICATORS.map(code => (
+                      <button key={code} onClick={() => setActiveIndicatorView(code)} className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-widest transition-all flex items-center gap-1 shadow-sm ${activeIndicatorView === code ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'}`}>
+                        {code}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="hidden lg:grid grid-cols-12 gap-4 items-center px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl mb-4 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    <div className="col-span-12 lg:col-span-4">Indicadores &amp; Requisitos Clínicos</div>
+                    <div className="col-span-12 lg:col-span-8 grid grid-cols-5 gap-3 text-center">
+                      <div>SIAPS (Base)</div>
+                      <div>Planilha Sem 1</div>
+                      <div>Planilha Sem 2</div>
+                      <div>Planilha Sem 3</div>
+                      <div>Planilha Sem 4</div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-6">
+                    {CORE_INDICATORS.map(indCode => {
+                      if (activeIndicatorView !== 'TODOS' && activeIndicatorView !== indCode) return null;
+                      
+                      const metadata = {
+                        C2: { name: "CUIDADO NO DESENVOLVIMENTO INFANTIL", desc: "Consultas de Puericultura, Vacinas, Visitas" },
+                        C3: { name: "CUIDADO NA GESTAÇÃO E PUERPÉRIO", desc: "Pré-Natal, dTpa, Exames Clínicos, Visitas ACS" },
+                        C4: { name: "CUIDADO DA PESSOA COM DIABETES", desc: "Acompanhamento Clínico, PA, Pé Diabético, Hemo. Glicada" },
+                        C5: { name: "CUIDADO DA PESSOA COM HIPERTENSÃO", desc: "Consultas Médicas, Aferição de PA, Visitas Periódicas" },
+                        C6: { name: "CUIDADO DA PESSOA IDOSA", desc: "Avaliação Multidimensional, Vacina Influenza, Visitas" },
+                        C7: { name: "CUIDADO DA MULHER NA PREVENÇÃO DO CÂNCER", desc: "Prevenção Câncer Colo de Útero, Mama, HPV e Saúde Sexual" }
+                      }[indCode];
+
+                      const indScoresPerBucket = BUCKETS.map(b => {
+                          let bTotalScore = 0; let bCount = 0;
+                          baseFilteredPatients.forEach(p => {
+                              if (p.indicadores && p.indicadores.includes(indCode)) {
+                                  const val = p.scores?.[b]?.[indCode];
+                                  if (val !== null && val !== undefined) {
+                                    bCount++; bTotalScore += val;
+                                  }
+                              }
+                          });
+                          return { bucket: b, avg: bCount > 0 ? Math.round(bTotalScore / bCount) : 0, count: bCount };
+                      });
+
+                      const itemsList = { C2: ['A','B','C','D','E'], C3: ['A','B','C','D','E','F','G','H','I','J','K'], C4: ['A','B','C','D','E','F'], C5: ['A','B','C','D'], C6: ['A','B','C','D'], C7: ['A','B','C','D'] }[indCode];
+                      const itemsDetails = {
+                        C2: { A: "1ª consulta presencial até 30º dia", B: "09 consultas até 2 anos", C: "09 registros peso/altura", D: "02 visitas ACS", E: "Vacinas completas" },
+                        C3: { A: "1ª consulta até 12ª sem", B: "07 consultas pré-natal", C: "07 registros de PA", D: "07 registros peso/altura", E: "03 visitas ACS", F: "dTpa a partir 20ª sem", G: "Testes rápidos HIV/Sífilis 1º Tri", H: "Testes rápidos HIV/Sífilis 3º Tri", I: "Consulta puerpério", J: "Visita ACS puerpério", K: "Atendimento odontológico" },
+                        C4: { A: "Consulta presencial (6m)", B: "Aferição de PA (6m)", C: "Peso/Altura (12m)", D: "02 Visitas ACS (12m)", E: "Hemoglobina Glicada", F: "Avaliação do pé diabético" },
+                        C5: { A: "Consulta presencial (6m)", B: "Aferição de PA (6m)", C: "Peso/Altura (12m)", D: "02 Visitas ACS (12m)" },
+                        C6: { A: "Consulta presencial (12m)", B: "Peso/Altura (12m)", C: "02 Visitas ACS (12m)", D: "Vacina Influenza" },
+                        C7: { A: "Rastreio câncer colo do útero (últimos 36m)", B: "Vacina HPV (09 a 14 anos)", C: "Atendimento saúde sexual/reprod. (últimos 12m)", D: "Rastreamento câncer de mama de 50 a 69 anos (últimos 24m)" }
+                      }[indCode];
+                      const itemsPts = {
+                        C2: { A:20, B:20, C:20, D:20, E:20 }, C3: { A:10, B:9, C:9, D:9, E:9, F:9, G:9, H:9, I:9, J:9, K:9 },
+                        C4: { A:20, B:15, C:15, D:20, E:15, F:15 }, C5: { A:25, B:25, C:25, D:25 }, C6: { A:25, B:25, C:25, D:25 }, C7: { A:20, B:30, C:30, D:20 }
+                      }[indCode];
+
+                      return (
+                        <div key={indCode} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all hover:shadow-md animate-fade-in">
+                          <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                            <h4 className="text-sm font-black text-slate-800 leading-tight flex items-center gap-2">
+                              <span className="bg-indigo-600 px-2.5 py-1 rounded text-white text-[10px] font-black tracking-widest shadow-sm">{indCode}</span> {metadata.name}
+                            </h4>
+                          </div>
+
+                          <div className="p-5 space-y-5">
+                            <div className="grid grid-cols-12 gap-4 items-center bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+                              <div className="col-span-12 lg:col-span-4 flex items-center gap-3">
+                                <div className="w-1.5 h-8 bg-indigo-600 rounded-full"></div>
+                                <div>
+                                  <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest block">Média do Indicador</span>
+                                  <span className="text-xs font-black text-slate-800">Desempenho Direto ({indCode})</span>
+                                </div>
+                              </div>
+                              <div className="col-span-12 lg:col-span-8 grid grid-cols-5 gap-3">
+                                 {indScoresPerBucket.map(s => {
+                                     const hasData = s.count > 0 || s.bucket === 'SIAPS';
+                                     const bgClass = !hasData ? 'bg-slate-100 border-slate-200 text-slate-400' : s.avg >= 80 ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-bold' : s.avg >= 50 ? 'bg-amber-50 border-amber-200 text-amber-700 font-bold' : 'bg-rose-50 border-rose-200 text-rose-700 font-bold';
+                                     return (
+                                         <div key={s.bucket} className={`rounded-xl p-3 flex flex-col items-center justify-center border ${bgClass} text-center shadow-sm`}>
+                                             <span className="text-base md:text-lg font-black leading-none">{hasData ? `${s.avg}%` : '-'}</span>
+                                             <span className="text-[8px] font-black uppercase opacity-70 mt-1.5 tracking-wider">{s.bucket}</span>
+                                             <span className="text-[7.5px] font-bold opacity-60 mt-0.5">{hasData ? `${s.count} Alvos` : 'Pendente'}</span>
+                                         </div>
+                                     );
+                                 })}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 py-1">
+                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Critérios Assistenciais do Indicador</span>
+                              <div className="w-full h-px bg-slate-200"></div>
+                            </div>
+
+                            <div className="space-y-3">
+                              {itemsList.map(k => {
+                                const statsPerBucket = BUCKETS.map(b => {
+                                  let feitos = 0; let pendentes = 0; let semFaturamento = 0; let isentos = 0;
+                                  const isBucketActive = baseFilteredPatients.some(p => p.scores?.[b]?.[indCode] !== null && p.scores?.[b]?.[indCode] !== undefined);
+
+                                  baseFilteredPatients.forEach(p => {
+                                    if (p.indicadores && p.indicadores.includes(indCode)) {
+                                      if (!isBucketActive) {
+                                          semFaturamento++;
+                                          return;
+                                      }
+                                      
+                                      if (p.bp?.[b]?.[indCode] === undefined) {
+                                          semFaturamento++;
+                                          return;
+                                      }
+
+                                      let isOk = p.bp?.[b]?.[indCode]?.[k];
+                                      if (isOk === "NA") {
+                                          isentos++; 
+                                      } else if(isOk === true) {
+                                          feitos++;
+                                      } else {
+                                          pendentes++;
+                                      }
+                                    }
+                                  });
+                                  return { bucket: b, feitos, pendentes, semFaturamento, isentos };
+                                });
+
+                                return (
+                                  <div key={k} className="grid grid-cols-12 gap-4 items-center bg-white hover:bg-slate-50 border border-slate-200 p-4 rounded-xl transition-all shadow-sm">
+                                    <div className="col-span-12 lg:col-span-4 pr-2">
+                                      <div className="flex items-start gap-2.5">
+                                        <span className="text-slate-400 font-mono font-bold text-xs mt-0.5">[{k}]</span>
+                                        <div>
+                                          <span className="text-slate-800 font-semibold text-xs leading-relaxed block text-imprimir">{itemsDetails[k]}</span>
+                                          <div className="flex items-center gap-2 mt-1.5">
+                                            <span className="text-indigo-700 font-black bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-[8.5px] font-mono tracking-wider">{itemsPts[k]} PTS</span>
+                                            <span className="text-[8.5px] text-slate-500 font-bold uppercase" title="Baseada no SIAPS">
+                                                Meta Dinâmica
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="col-span-12 lg:col-span-8 grid grid-cols-5 gap-3">
+                                      {statsPerBucket.map(obj => {
+                                        const total = obj.feitos + obj.pendentes;
+                                        const isMuted = obj.semFaturamento > 0 && total === 0 && obj.isentos === 0;
+                                        const percentage = total > 0 ? Math.round((obj.feitos / total) * 100) : 0;
+                                        const textColor = isMuted ? 'text-slate-400' : percentage >= 80 ? 'text-emerald-600' : percentage >= 50 ? 'text-amber-600' : 'text-rose-600';
+
+                                        return (
+                                          <div key={obj.bucket} className={`flex flex-col justify-between rounded-xl border p-2.5 min-h-[76px] transition-all ${obj.bucket === latestPecBucket ? 'border-indigo-300 bg-indigo-50 shadow-sm' : 'border-slate-200 bg-slate-50'} relative`}>
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">{obj.bucket}</span>
+                                              {!isMuted && total > 0 && <span className={`text-[9.5px] font-mono font-black ${textColor}`}>{percentage}%</span>}
+                                            </div>
+                                            
+                                            {isMuted ? (
+                                              <div className="text-center py-2">
+                                                <span className="text-[9px] text-slate-400 italic block font-semibold">Pendente</span>
+                                                <div className="w-full bg-slate-200 h-1 rounded-full mt-1.5 overflow-hidden"><div className="h-full bg-slate-300 rounded-full" style={{ width: '0%' }}></div></div>
+                                              </div>
+                                            ) : total === 0 && obj.isentos > 0 ? (
+                                              <div className="text-center py-2">
+                                                <span className="text-[9px] text-indigo-500 block font-black border border-indigo-200 bg-indigo-100 rounded py-1 px-1 mt-1">ISENTOS N/A</span>
+                                              </div>
+                                            ) : (
+                                              <div className="mt-2.5">
+                                                <div className="flex items-baseline justify-between">
+                                                  <span className={`text-sm md:text-base font-black ${textColor} tracking-tight`}>{obj.feitos}</span>
+                                                  <span className="text-[8.5px] text-slate-400 font-bold font-mono">/ {total}</span>
+                                                </div>
+                                                <div className="w-full bg-slate-200 h-1 rounded-full mt-1.5 overflow-hidden">
+                                                  <div className={`h-full rounded-full transition-all duration-500 ${percentage >= 80 ? 'bg-emerald-500' : percentage >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${percentage}%` }}></div>
+                                                </div>
+                                                {obj.isentos > 0 && <div className="text-[7px] text-slate-400 text-center mt-1 uppercase tracking-widest font-bold">+{obj.isentos} N/A (Idade)</div>}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ABA LISTA GERAL DE GAPS */}
+            {activeTab === 'patients' && (
+              <div className="space-y-6 animate-fade-in relative z-10">
+                {renderFastSearchFilters()}
+                {renderDetailedSearchBar()}
+
+                <div className="flex flex-col sm:flex-row justify-between items-center bg-white border border-slate-200 p-4 rounded-xl gap-3 animate-fade-in shadow-sm">
+                  <div className="text-xs text-slate-500">
+                    Mostrando <strong className="text-slate-800">{tableFilteredPatients.length}</strong> paciente(s) com base nos filtros clínicos.
+                  </div>
+                  <button onClick={handleExportTicketsExcel} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Exportar Auditoria de Tickets (Excel)
+                  </button>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto min-h-[400px]">
+                    <table className="w-full text-left border-collapse whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 tracking-wider border-b border-slate-200">
+                          <th className="px-5 py-3 sticky left-0 bg-slate-100 z-35 w-80 shadow-[1px_0_0_#e2e8f0]">Dados do Paciente / Localização</th>
+                          <th className="px-5 py-3 text-center w-36 border-l border-slate-200 bg-slate-50">SIAPS (Referência)</th>
+                          <th className="px-5 py-3 text-center w-48 border-l border-slate-200">Pontuação Atual ({latestPecBucket})</th>
+                          <th className="px-5 py-3 border-l border-slate-200">Auditoria Clínica Detalhada (Ganhos &amp; Perdas)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {pagedPatients.length > 0 ? pagedPatients.map(p => {
+                          const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+                          const hasSiapsData = coreInds.some(ind => p.bp?.['SIAPS']?.[ind] !== undefined);
+                          const hasAnyPecData = coreInds.some(ind => ['W1','W2','W3','W4'].some(bucket => p.bp?.[bucket]?.[ind] !== undefined));
+                          const isSincronizado = hasSiapsData && hasAnyPecData;
+
+                          return (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-5 py-4 sticky left-0 bg-white z-10 shadow-[1px_0_0_#e2e8f0] align-top">
+                                <strong className="text-slate-800 text-xs flex flex-wrap items-center gap-1.5 max-w-[280px]">
+                                  {p.bolsaFamilia && <span className="text-amber-600 text-xs font-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200" title="Beneficiário do Bolsa Família">BF</span>}
+                                  {p.nomePec ? <span className="truncate font-semibold text-slate-800" title={p.nomePec}>{p.nomePec}</span> : <span className="truncate font-normal text-slate-400 italic">⚠️ Aguardando PEC</span>}
+                                  {isSincronizado && <span className="bg-emerald-100 border border-emerald-200 text-emerald-700 px-1 py-0.5 rounded text-[8px] font-black tracking-widest uppercase">Sinc.</span>}
+                                  {!hasSiapsData && hasAnyPecData && <span className="bg-amber-100 border border-amber-200 text-amber-700 px-1 py-0.5 rounded text-[8px] font-black tracking-widest uppercase">Apenas PEC</span>}
+                                  {hasSiapsData && !hasAnyPecData && <span className="bg-rose-100 border border-rose-200 text-rose-700 px-1 py-0.5 rounded text-[8px] font-black tracking-widest uppercase">Apenas SIAPS</span>}
+                                  {p.is_nearing_deadline && <span className="bg-yellow-100 border border-yellow-200 text-yellow-700 px-1 py-0.5 rounded text-[8px] font-black tracking-widest uppercase flex items-center gap-0.5"><Clock className="w-2 h-2"/>Vence</span>}
+                                </strong>
+                                <div className="text-[9px] font-mono text-slate-500 mt-1">CPF: {p.cpf} &bull; CNS: {p.cns}</div>
+                                <div className="text-[9px] text-slate-500 mt-1 truncate max-w-[280px]" title={p.endereco}>📍 {p.endereco}</div>
+                                <div className="text-[9px] text-indigo-600 font-semibold mt-1">🏥 INE: {p.equipe} &bull; MA: {p.microarea === "XX" ? "XX" : p.microarea}</div>
+                              </td>
+
+                              <td className="px-5 py-4 text-center border-l border-slate-200 align-top bg-slate-50">
+                                <div className="flex flex-col gap-1.5 items-center">
+                                  {coreInds.map(ind => {
+                                    const score = p.scores ? p.scores['SIAPS']?.[ind] : null;
+                                    return (
+                                      <div key={ind} className="flex flex-col items-center gap-1 bg-white border border-slate-200 p-1.5 rounded-lg w-full max-w-[120px] shadow-sm">
+                                        <span className="text-[10px] font-black text-slate-500">{ind}</span>
+                                        {score !== null && score !== undefined ? <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-mono font-bold text-[9px]">{score} PTS</span> : <span className="text-[9px] text-slate-400 italic">Inexistente/Isento</span>}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+
+                              <td className="px-5 py-4 text-center border-l border-slate-200 align-top">
+                                <div className="flex flex-col gap-1.5 items-center">
+                                  {coreInds.map(ind => {
+                                    const scorePec = p.scores ? p.scores[latestPecBucket]?.[ind] : null;
+                                    const hasData = scorePec !== null && scorePec !== undefined;
+                                    const audit = hasData && p.recommendations && p.recommendations[latestPecBucket] ? p.recommendations[latestPecBucket][ind] : null;
+                                    const sumGains = audit?.gains ? audit.gains.reduce((acc, curr) => acc + curr.pts, 0) : 0;
+                                    const sumLosses = audit?.losses ? audit.losses.reduce((acc, curr) => acc + curr.pts, 0) : 0;
+
+                                    return (
+                                      <div key={ind} className="flex flex-col items-center gap-1 bg-slate-50 border border-slate-200 p-1.5 rounded-lg w-full max-w-[170px] shadow-sm">
+                                        <span className="text-[10px] font-black text-slate-600">{ind}</span>
+                                        {hasData ? (
+                                          <React.Fragment>
+                                            <span className="text-sm font-black text-slate-800">{scorePec} PTS</span>
+                                            <div className="flex flex-wrap justify-center gap-1 text-[8px] font-mono font-bold">
+                                              {sumGains > 0 && <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">+{sumGains}G</span>}
+                                              {sumLosses > 0 && <span className="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded">-{sumLosses}P</span>}
+                                              {sumGains === 0 && sumLosses === 0 && <span className="text-slate-400 italic">Estável/Isento</span>}
+                                            </div>
+                                          </React.Fragment>
+                                        ) : (
+                                          <div className="py-1"><span className="text-slate-400 italic text-[11px] block font-semibold">Pendente</span></div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+
+                              <td className="px-5 py-4 border-l border-slate-200 align-top max-w-xl whitespace-normal">
+                                <div className="flex flex-col gap-3">
+                                  {coreInds.map(ind => {
+                                      const audit = p.recommendations && p.recommendations[latestPecBucket] ? p.recommendations[latestPecBucket][ind] : null;
+                                      if (!audit) return <div key={ind} className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span className="text-slate-400 text-[10px] italic">Aguardando processamento PEC.</span></div>;
+
+                                      return (
+                                        <div key={ind} className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm space-y-3">
+                                          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-[9px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">{ind}</span>
+                                              <span className="text-[10px] text-slate-600 font-bold">Metas de Evolução Assistencial</span>
+                                            </div>
+                                          </div>
+                                          {audit.gains && audit.gains.length > 0 && (
+                                            <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                                              <div className="text-[10px] font-black text-emerald-700 flex items-center gap-1.5 mb-2"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> GANHOU O "X"</div>
+                                              <ul className="space-y-1.5">{audit.gains.map((g, idx) => <li key={idx} className="text-[9.5px] text-slate-700"><div className="flex justify-between"><span><span className="text-emerald-600 font-bold">(+)</span> <strong>[{g.item}]</strong> {g.desc}</span><span className="text-emerald-600 font-mono font-bold">+{g.pts}pts</span></div></li>)}</ul>
+                                            </div>
+                                          )}
+                                          {audit.losses && audit.losses.length > 0 && (
+                                            <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-lg">
+                                              <div className="text-[10px] font-black text-rose-700 flex items-center gap-1.5 mb-2"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> PERDEU O "X"</div>
+                                              <ul className="space-y-2">{audit.losses.map((l, idx) => <li key={idx} className="text-[9.5px] text-slate-700 border-b border-rose-100 pb-2"><div className="flex justify-between"><span><span className="text-rose-600 font-bold">(-)</span> <strong>[{l.item}]</strong> {l.desc}</span><span className="text-rose-600 font-mono font-bold">-{l.pts}pts</span></div></li>)}</ul>
+                                            </div>
+                                          )}
+                                          {audit.maintained && audit.maintained.length > 0 && (
+                                            <div className="bg-slate-50 border border-slate-200 p-2 rounded-lg">
+                                              <div className="text-[9px] font-black text-slate-500 mb-1">MANTIDOS COM "X"</div>
+                                              <ul className="space-y-1.5">{audit.maintained.map((m, idx) => <li key={idx} className="text-[9px] text-slate-600 flex justify-between border-b border-slate-200 pb-1.5"><span>(=) [{m.item}] {m.desc}</span><span className="font-mono font-bold">({m.pts}pts)</span></li>)}</ul>
+                                            </div>
+                                          )}
+                                          {audit.pending && audit.pending.length > 0 && (
+                                            <div className="bg-slate-50 border border-slate-200 p-2 rounded-lg">
+                                              <div className="text-[9px] font-black text-slate-500 mb-1">GAPs CONTINUADOS</div>
+                                              <ul className="space-y-2">{audit.pending.map((x, idx) => <li key={idx} className="text-[9px] text-slate-600 flex flex-col border-b border-slate-200 pb-1.5"><div className="flex justify-between"><span>(!) [{x.item}] {x.desc}</span><span className="font-mono">({x.pts}pts sob risco)</span></div>{x.warning && <span className="text-[8.5px] font-bold text-rose-600 mt-0.5">{x.warning}</span>}</li>)}</ul>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                  })}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }) : <tr><td colSpan="4" className="text-center py-10 text-slate-500 font-medium">Nenhum paciente atende aos critérios atuais.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Pagination currentPage={currentPagePats} totalItems={tableFilteredPatients.length} rowsPerPage={rowsPerPage} onPageChange={setCurrentPagePats} />
+                </div>
+              </div>
+            )}
+
+            {/* ABA ROTEIRO DE RUA (ACS) */}
+            {activeTab === 'roteiro' && (
+              <div className="space-y-6 animate-fade-in relative z-10">
+                {renderFastSearchFilters()}
+                {renderDetailedSearchBar()}
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-4 gap-4">
+                     <div>
+                        <h2 className="text-base font-black text-emerald-600 tracking-tight">Roteiro de Campo Prático do ACS</h2>
+                        <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Lista de pacientes agrupados por Endereço para otimização de rota.</p>
+                     </div>
+                     <button onClick={handleExportHTML} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-md">
+                        <BookOpen className="w-4 h-4" /> Exportar Roteiro PDF/HTML (Pronto p/ Impressão)
+                     </button>
+                  </div>
+                  
+                  {}
+                  <div className="overflow-x-auto min-h-[400px]">
+                    <table className="w-full text-left border-collapse whitespace-nowrap text-[10px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-500 tracking-wider border-b border-slate-200">
+                           <th className="px-3 py-2 border-r border-slate-100">Sinc.</th>
+                           <th className="px-3 py-2 border-r border-slate-100">Eq/MA</th>
+                           <th className="px-3 py-2 border-r border-slate-100">Paciente</th>
+                           <th className="px-3 py-2 border-r border-slate-100">Idade</th>
+                           <th className="px-3 py-2 border-r border-slate-100">Endereço</th>
+                           <th className="px-3 py-2 border-r border-slate-100">Pendências de Visita</th>
+                           <th className="px-3 py-2">Últ. Visita</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                         {pagedRoteiro.length > 0 ? pagedRoteiro.map(p => {
+                            const coreInds = p.indicadores ? p.indicadores.filter(ind => CORE_INDICATORS.includes(ind)) : [];
+                            const hasSiaps = coreInds.some(ind => p.bp?.['SIAPS']?.[ind] !== undefined);
+                            const hasPec = coreInds.some(ind => ['W1','W2','W3','W4'].some(bucket => p.bp?.[bucket]?.[ind] !== undefined));
+                            let syncText = "Sinc."; if (!hasSiaps && hasPec) syncText = "Só PEC"; if (hasSiaps && !hasPec) syncText = "Só SIAPS";
+                            
+                            return (
+                               <tr key={p.id} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2 border-r border-slate-100 font-bold text-slate-500">{syncText}</td>
+                                  <td className="px-3 py-2 border-r border-slate-100 font-bold text-slate-700">{p.equipe}<br/>MA: {p.microarea === "XX" ? "XX" : p.microarea}</td>
+                                  <td className="px-3 py-2 border-r border-slate-100 font-bold text-slate-800 max-w-[150px] truncate" title={p.nomePec || p.nomeSiaps}>{p.bolsaFamilia && <span className="text-amber-600 mr-1">[BF]</span>}{p.nomePec || p.nomeSiaps}</td>
+                                  <td className="px-3 py-2 border-r border-slate-100">{p.idade && p.idade !== "N/I" ? p.idade : 'N/I'}</td>
+                                  <td className="px-3 py-2 border-r border-slate-100 max-w-[180px] truncate" title={p.endereco}>{p.endereco}</td>
+                                  <td className="px-3 py-2 border-r border-slate-100 max-w-[250px] whitespace-normal">
+                                     {coreInds.map(ind => {
+                                         const recs = p.recommendations?.[latestPecBucket]?.[ind];
+                                         if (!recs) return null;
+                                         const visitPendings = (recs.pending || []).filter(x => VISIT_ITEMS_MAP[ind]?.includes(x.item));
+                                         if(visitPendings.length === 0) return null;
+                                         return (
+                                            <div key={ind} className="mb-1 pb-1 border-b border-slate-100 last:border-0">
+                                               <span className="font-bold text-rose-600">[{ind}]</span> {visitPendings.map(v => <span key={v.item} className="text-slate-600 block leading-tight mt-0.5">{v.desc} {v.warning && <strong className="text-rose-500 block">{v.warning}</strong>}</span>)}
+                                            </div>
+                                         );
+                                     })}
+                                  </td>
+                                  <td className="px-3 py-2 font-bold text-slate-700">{p.ultimaVisitaACS && p.ultimaVisitaACS !== "Sem registro" ? p.ultimaVisitaACS.split('-').reverse().join('/') : "Sem Reg."}</td>
+                               </tr>
+                            );
+                         }) : <tr><td colSpan="7" className="text-center py-6 text-slate-500">Nenhum paciente filtrado.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Pagination currentPage={currentPageRot} totalItems={tableFilteredPatients.length} rowsPerPage={rowsPerPage} onPageChange={setCurrentPageRot} />
+                </div>
+              </div>
+            )}
+
+            {}
+            {/* ABA EXAMES */}
+            {activeTab === 'exames' && (
+              <div className="space-y-6 animate-fade-in relative z-10">
+                {renderDetailedSearchBar()}
+                
+                <div className="bg-white border border-slate-200 p-4 rounded-xl flex flex-wrap gap-4 items-center shadow-sm">
+                   <div className="flex flex-col gap-1.5 min-w-[200px]">
+                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Filtrar por Tipo de Exame</label>
+                       <MultiSelect 
+                           options={[
+                               {value: 'C4-E', label: 'Hemoglobina Glicada (C4)'},
+                               {value: 'C7-A', label: 'Citopatológico - Colo Útero (C7)'},
+                               {value: 'C7-D', label: 'Mamografia (C7)'}
+                           ]} 
+                           selected={selectedExameTypes} 
+                           onChange={setSelectedExameTypes} 
+                           placeholder="Todos os Exames Alvo" 
+                       />
+                   </div>
+                   <div className="flex flex-col gap-1.5 min-w-[200px]">
+                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Status do Exame</label>
+                       <select value={statusExameFilter} onChange={e => setStatusExameFilter(e.target.value)} className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+                           <option value="TODOS">Todos os Status</option>
+                           <option value="OK">OK (Realizados/Avaliados)</option>
+                           <option value="PENDENTES">Pendentes (Necessitam Busca)</option>
+                       </select>
+                   </div>
+                   <div className="flex-1 flex justify-end">
+                       <button onClick={handleExportExamesHTML} className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all shadow-md">
+                           <Microscope className="w-4 h-4" /> Exportar Relatório de Exames
+                       </button>
+                   </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                   <div className="overflow-x-auto min-h-[400px]">
+                    <table className="w-full text-left border-collapse whitespace-nowrap text-[10px]">
+                      <thead>
+                        <tr className="bg-amber-50 text-[9px] font-black uppercase text-amber-800 tracking-wider border-b border-amber-200">
+                           <th className="px-3 py-2 border-r border-amber-100">Paciente</th>
+                           <th className="px-3 py-2 border-r border-amber-100">Exame Monitorado</th>
+                           <th className="px-3 py-2 border-r border-amber-100">Status Atual</th>
+                           <th className="px-3 py-2 border-r border-amber-100">Data Ref.</th>
+                           <th className="px-3 py-2">Eq/MA</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                         {pagedExames.length > 0 ? pagedExames.map(p => {
+                            const renderExamRow = (ind, item, title, dateField) => {
+                                const isNa = p.bp?.['SIAPS']?.[ind]?.[item] === 'NA' || p.bp?.[latestPecBucket]?.[ind]?.[item] === 'NA';
+                                if (isNa) return null;
+
+                                const hasPecItem = p.bp?.[latestPecBucket]?.[ind]?.[item] === true;
+                                const hasSiapsItem = p.bp?.['SIAPS']?.[ind]?.[item] === true;
+                                const status = (hasPecItem || hasSiapsItem) ? 'OK' : 'PENDENTES';
+
+                                if (statusExameFilter !== 'TODOS' && statusExameFilter !== status) return null;
+                                
+                                const rawDate = dateField ? p.dataExecucoes?.[dateField] : null;
+                                const formattedDate = (rawDate && rawDate !== "Sem registro" && rawDate !== "-") ? rawDate.split('-').reverse().join('/') : "S/D";
+
+                                return (
+                                    <tr key={`${p.id}-${ind}-${item}`} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 border-r border-slate-100">
+                                            <div className="font-bold text-slate-800 max-w-[180px] truncate">{p.nomePec || p.nomeSiaps}</div>
+                                            <div className="text-[8.5px] text-slate-500 font-mono mt-0.5">CPF: {p.cpf !== 'N/I' ? p.cpf : p.cns}</div>
+                                        </td>
+                                        <td className="px-3 py-2 border-r border-slate-100 font-bold text-amber-700">[{ind}] {title}</td>
+                                        <td className="px-3 py-2 border-r border-slate-100">
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-widest ${status === 'OK' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{status}</span>
+                                            <div className="text-[8px] text-slate-500 mt-1">PEC: {hasPecItem?'SIM':'NÃO'} | SIAPS: {hasSiapsItem?'SIM':'NÃO'}</div>
+                                        </td>
+                                        <td className="px-3 py-2 border-r border-slate-100 font-mono text-slate-600">{formattedDate}</td>
+                                        <td className="px-3 py-2 text-slate-600 font-bold">{p.equipe} / {p.microarea === "XX" ? "XX" : p.microarea}</td>
+                                    </tr>
+                                );
+                            };
+
+                            const rows = [];
+                            const showAll = selectedExameTypes.length === 0;
+
+                            if ((showAll || selectedExameTypes.includes('C4-E')) && p.indicadores?.includes('C4')) {
+                                const r = renderExamRow('C4', 'E', 'Hemo. Glicada', 'hemo');
+                                if (r) rows.push(r);
+                            }
+                            if ((showAll || selectedExameTypes.includes('C7-A')) && p.indicadores?.includes('C7')) {
+                                const r = renderExamRow('C7', 'A', 'Colo do Útero', 'exameColo');
+                                if (r) rows.push(r);
+                            }
+                            if ((showAll || selectedExameTypes.includes('C7-D')) && p.indicadores?.includes('C7')) {
+                                const r = renderExamRow('C7', 'D', 'Mamografia', null);
+                                if (r) rows.push(r);
+                            }
+
+                            return rows;
+                         }) : <tr><td colSpan="5" className="text-center py-6 text-slate-500">Nenhum exame monitorado atende aos filtros.</td></tr>}
+                      </tbody>
+                    </table>
+                   </div>
+                   <Pagination currentPage={currentPageExames} totalItems={examesFilteredPatients.length} rowsPerPage={rowsPerPage} onPageChange={setCurrentPageExames} />
+                </div>
+              </div>
+            )}
+
+            {}
+            {/* ABA LOGS & PYTHON */}
+            {activeTab === 'logs' && (
+              <div className="space-y-4 animate-fade-in relative z-10">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                  <div className="bg-slate-800 px-5 py-3 border-b border-slate-700 flex items-center justify-between">
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2"><Terminal className="h-4 w-4 text-indigo-400" /> Console de Diagnóstico (Pyodide Wasm)</h3>
+                    <button onClick={() => setShowPythonCodePanel(!showPythonCodePanel)} className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded font-bold transition-colors shadow-sm">
+                      {showPythonCodePanel ? 'Ocultar Motor Python' : 'Ver Código Python (Motor)'}
+                    </button>
+                  </div>
+                  
+                  {showPythonCodePanel && (
+                    <div className="p-4 bg-slate-950 border-b border-slate-800 overflow-x-auto">
+                      <pre className="text-[10px] text-emerald-400 font-mono leading-relaxed">
+                        <code>{PYTHON_CALCULATOR_CODE}</code>
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="p-5 h-96 overflow-y-auto font-mono text-[10px] space-y-2">
+                    {appLogs.map((log, idx) => (
+                      <div key={idx} className={`flex gap-3 pb-2 border-b border-slate-800/50 ${log.type === 'ERROR' ? 'text-rose-400' : log.type === 'SUCCESS' ? 'text-emerald-400' : log.type === 'WARNING' ? 'text-amber-400' : 'text-slate-400'}`}>
+                        <span className="opacity-50 shrink-0">[{log.time}]</span>
+                        <span className="shrink-0 font-bold w-20">{log.type}</span>
+                        <span className="break-all whitespace-pre-wrap">{log.msg}</span>
+                      </div>
+                    ))}
+                    {appLogs.length === 0 && <div className="text-slate-500 italic">Nenhum evento registrado na sessão.</div>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

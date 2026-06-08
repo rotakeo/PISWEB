@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Master v101.55 - Validação Temporal C2 e C3</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #0f172a; margin: 0; }
+        .font-mono-audit { font-family: 'JetBrains Mono', monospace; }
+        .audit-desc { line-height: 1.4; white-space: pre-wrap; font-size: 10px; }
+        .text-ok { color: #059669; font-weight: 800; }
+        .text-pnd { color: #dc2626; font-weight: 800; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        .filter-label { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .filter-select { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #1e293b; width: 100%; transition: all 0.2s; }
+        
+        .ind-btn { border: 1px solid #e2e8f0; color: #64748b; font-weight: 800; background: white; transition: all 0.2s; position: relative; }
+        .ind-btn.active { ring: 2px solid #3b82f6; background: #eff6ff; color: #1e40af; border-color: #3b82f6; }
+        .ind-btn.done { border-color: #10b981; background: #ecfdf5; color: #065f46; }
+        .ind-btn.done::after { content: '✓'; position: absolute; top: -5px; right: -5px; background: #10b981; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+        
+        .action-btn { transition: all 0.2s; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .import-label-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .ma-btn { transition: all 0.2s; font-size: 10px; padding: 4px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; border: 1px solid transparent; }
+        .ma-btn.active { background: #2563eb; color: white; border-color: #1d4ed8; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .ma-btn.inactive { background: white; color: #475569; border-color: #cbd5e1; }
+        .ma-btn.inactive:hover { background: #f1f5f9; border-color: #94a3b8; }
+    </style>
+</head>
+<body class="p-4 md:p-6 flex flex-col gap-6">
+
+    <div id="pyscript-loader" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900 bg-opacity-95 text-white">
+        <div class="animate-spin h-16 w-16 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
+        <h2 class="text-xl font-black uppercase tracking-widest text-center">Audit Master v101.55<br><span class="text-xs">Validação de Prazos C2 Ativada</span></h2>
+        <p class="text-[10px] text-blue-300 mt-4 uppercase font-bold tracking-widest text-center max-w-sm">A iniciar o motor Python e a transferir pacotes...<br>Por favor, aguarde alguns segundos.</p>
+    </div>
+
+    <header class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm w-full max-w-[1800px] mx-auto">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+            <div>
+                <h1 class="text-3xl font-black italic tracking-tighter uppercase leading-none text-slate-800">
+                    Audit <span class="text-blue-600">Master</span> <span class="text-slate-400 text-lg font-mono">v101.55</span>
+                </h1>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1 italic">Fix SIAPS e C7</p>
+            </div>
+            
+            <div class="flex flex-col md:flex-row items-center gap-4 bg-slate-50 p-4 rounded-2xl border flex-1">
+                <div class="flex flex-col gap-1 flex-1">
+                    <span class="text-[9px] font-black uppercase text-slate-400 ml-1">Motor de Destino (Carga)</span>
+                    <div id="indicator-buttons" class="flex flex-wrap gap-2">
+                        <button id="btn-SIAPS" onclick="onImportContextClick('SIAPS')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">SIAPS</button>
+                        <button id="btn-C2" onclick="onImportContextClick('C2')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase active">C2</button>
+                        <button id="btn-C3" onclick="onImportContextClick('C3')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">C3</button>
+                        <button id="btn-C4" onclick="onImportContextClick('C4')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">C4</button>
+                        <button id="btn-C5" onclick="onImportContextClick('C5')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">C5</button>
+                        <button id="btn-C6" onclick="onImportContextClick('C6')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">C6</button>
+                        <button id="btn-C7" onclick="onImportContextClick('C7')" class="ind-btn px-4 py-2 rounded-xl text-[10px] uppercase">C7</button>
+                    </div>
+                </div>
+                
+                <div class="h-12 w-px bg-slate-200 hidden md:block"></div>
+
+                <div class="flex flex-col gap-1 min-w-[260px]">
+                    <span class="text-[9px] font-black uppercase text-slate-400 ml-1">Executar Motor Selecionado</span>
+                    <label id="main-import-btn" for="file-input" class="import-label-btn flex justify-center items-center bg-slate-800 hover:bg-slate-900 text-white px-6 py-3.5 rounded-xl text-[11px] font-black uppercase cursor-pointer shadow-md transition-all active:scale-95">
+                        Importar para <span class="ml-1 text-blue-400 font-black" id="btn-label-ind">C2</span>
+                    </label>
+                    <input type="file" id="file-input" class="hidden" accept=".xlsx,.xls,.csv" multiple>
+                </div>
+            </div>
+        </div>
+
+        <div id="status-container" class="mt-4 hidden border-t pt-3">
+            <div class="flex justify-between text-[10px] font-bold uppercase mb-1 text-slate-500">
+                <span id="status-text">Processando...</span>
+                <span id="status-pct">0%</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden"><div id="progress-bar" class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div></div>
+        </div>
+    </header>
+
+    <div class="w-full max-w-[1800px] mx-auto bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+        <div class="flex flex-col gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 pb-6 border-b">
+                <div>
+                    <label class="filter-label">Fonte de Exibição</label>
+                    <select id="source-filter" onchange="onFilterChange()" class="filter-select">
+                        <option value="PEC" selected>SISTEMA PEC (e-SUS)</option>
+                        <option value="SIAPS">SISTEMA SIAPS</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="filter-label">Indicador</label>
+                    <select id="indicator-filter" onchange="onFilterChange()" class="filter-select">
+                        <option value="C2" selected>C2 - Desenv. Infantil</option>
+                        <option value="C3">C3 - Gestação/Puerpério</option>
+                        <option value="C4">C4 - Diabetes</option>
+                        <option value="C5">C5 - Hipertensão</option>
+                        <option value="C6">C6 - Pessoa Idosa</option>
+                        <option value="C7">C7 - Câncer de Colo</option>
+                        <option value="SIAPS">SIAPS - GERAL</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="filter-label">Equipe</label>
+                    <select id="team-filter" onchange="onFilterChange()" class="filter-select"><option value="ALL">TODAS</option></select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="filter-label">Microárea (Clique para selecionar)</label>
+                    <div id="ma-buttons-container" class="flex flex-wrap gap-1.5 max-h-[60px] overflow-y-auto custom-scroll p-1.5 border border-slate-200 rounded-xl bg-slate-50">
+                        <button class="ma-btn active" data-ma="ALL" onclick="toggleMA('ALL')">TODAS</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="bg-slate-50 border p-3 rounded-2xl text-center relative">
+                    <span class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Total de Pacientes</span>
+                    <div class="flex items-center justify-center gap-2">
+                        <span id="stat-total" class="text-2xl font-black text-slate-800">0</span>
+                        <span id="stat-bolsa" onclick="py_applyStatFilter('BOLSA_FAMILIA')" class="text-[10px] font-bold text-amber-600 bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer hover:bg-amber-200 transition-all shadow-sm flex items-center gap-1" title="Filtrar">
+                            <span class="text-sm font-black">*</span>
+                            <span id="stat-bolsa-val">0</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="bg-blue-50 border border-blue-100 p-3 rounded-2xl text-center">
+                    <span class="text-[9px] font-black text-blue-600 uppercase mb-1 tracking-tighter">Competência Visualizada</span>
+                    <span id="stat-dt-ref" class="text-sm font-black text-blue-700 font-mono-audit">-</span>
+                </div>
+            </div>
+
+            <div id="active-filter-alert" class="hidden p-3 bg-blue-100 border border-blue-200 rounded-xl flex justify-between items-center w-full mt-2">
+                <span class="text-[10px] font-black text-blue-800 uppercase tracking-widest">Filtro de Auditoria Ativo: <span id="filter-text" class="text-blue-600 ml-1"></span></span>
+                <button onclick="clearFilter()" class="text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-black uppercase shadow-sm transition-all">Limpar Filtro</button>
+            </div>
+
+            <div id="cards-container" class="flex flex-wrap gap-3 min-h-[90px]"></div>
+        </div>
+
+        <template id="card-template">
+            <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm flex-[1_1_220px] min-w-[220px] stats-card hidden">
+                <div class="label-card text-[9px] font-black text-slate-500 uppercase border-b pb-1 mb-2 truncate"></div>
+                <div class="flex justify-between text-[11px] font-bold">
+                    <span class="text-emerald-600">FEITO: <span class="stat-ok-val cursor-pointer px-1">0</span></span>
+                    <span class="text-red-500">PENDENTE: <span class="stat-pend-val cursor-pointer px-1">0</span></span>
+                </div>
+                <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden flex">
+                    <div class="bar-ok bg-emerald-500 h-full" style="width: 0%"></div>
+                    <div class="bar-pend bg-red-400 h-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div class="bg-white border rounded-3xl overflow-hidden shadow-sm flex-1 flex flex-col min-h-[400px]">
+        <div class="overflow-auto custom-scroll flex-1 max-h-[700px]">
+            <table class="w-full text-left border-collapse" id="main-table">
+                <thead class="bg-slate-50 sticky top-0 z-10 shadow-sm font-black uppercase text-[10px] text-slate-500">
+                    <tr>
+                        <th class="px-4 py-4 border-r w-24 text-center">Equipe</th>
+                        <th class="px-2 py-4 border-r w-12 text-center">MA</th>
+                        <th class="px-4 py-4 border-r w-56">Paciente</th>
+                        <th class="px-4 py-4 border-r w-24 text-center">Nasc.</th>
+                        <th class="px-4 py-4 border-r w-40 text-center">CPF/CNS</th>
+                        <th class="px-4 py-4 border-r w-64">Endereço Completo</th>
+                        <th class="px-6 py-4">Auditoria (X = Feito)</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body" class="divide-y text-[10px]"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="w-full max-w-[1800px] mx-auto bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex flex-col">
+            <span class="text-[10px] font-black text-slate-400 uppercase">Exportação</span>
+        </div>
+        <div class="flex gap-3 w-full md:w-auto">
+            <button id="btn-excel-export" disabled onclick="exportExcel()" class="action-btn flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3.5 rounded-xl shadow-md disabled:opacity-30">Excel</button>
+            <button onclick="takeScreenshot()" class="action-btn flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl shadow-md">Imagem</button>
+            <button onclick="generatePDF()" id="btn-pdf" class="action-btn flex-1 md:flex-none bg-rose-600 hover:bg-rose-700 text-white px-8 py-3.5 rounded-xl shadow-md">PDF</button>
+        </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 h-[160px] shadow-inner mb-6">
+        <div id="log-console" class="font-mono-audit text-[10px] text-green-400 overflow-y-auto h-full space-y-1"></div>
+    </div>
+
+    <script>
+        window.importContext = "C2";
+        window.doneIndicators = new Set(); 
+        window.selectedMAs = new Set(['ALL']);
+        
+        function addLog(msg, color="text-green-400") {
+            const console = document.getElementById("log-console");
+            const div = document.createElement("div"); div.className = `${color} py-0.5`;
+            div.innerText = `[${new Date().toLocaleTimeString()}] > ${msg}`;
+            console.appendChild(div); console.scrollTop = console.scrollHeight;
+        }
+
+        function onImportContextClick(id) {
+            window.importContext = id;
+            document.querySelectorAll('.ind-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById('btn-' + id);
+            if(activeBtn) activeBtn.classList.add('active');
+            
+            updateImportBtnUI(id);
+            addLog(`Motor do Grupo ${id === 'SIAPS' ? '[SIAPS]' : '[PEC]'} - Indicador ${id} ativado.`, "text-blue-300");
+        }
+
+        function updateImportBtnUI(id) {
+            const mainBtn = document.getElementById('main-import-btn');
+            const inputField = document.getElementById('file-input');
+            
+            if(window.doneIndicators.has(id)) {
+                mainBtn.innerHTML = `Motor <span class="ml-1 font-black text-blue-600">${id}</span> <span class="ml-1">ALIMENTADO ✓</span> <span class="text-[8px] ml-2 font-normal text-emerald-700">(+ ADD MAIS)</span>`;
+                mainBtn.className = "import-label-btn flex justify-center items-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 px-6 py-3.5 rounded-xl text-[11px] font-black uppercase cursor-pointer shadow-md transition-all active:scale-95";
+                inputField.disabled = false;
+            } else {
+                mainBtn.innerHTML = `Importar para <span class="ml-1 text-blue-400 font-black">${id}</span>`;
+                mainBtn.className = "import-label-btn flex justify-center items-center bg-slate-800 hover:bg-slate-900 text-white px-6 py-3.5 rounded-xl text-[11px] font-black uppercase cursor-pointer shadow-md transition-all active:scale-95";
+                inputField.disabled = false;
+            }
+        }
+
+        function markIndicatorAsDone(id) {
+            window.doneIndicators.add(id);
+            const btn = document.getElementById('btn-' + id);
+            if(btn) btn.classList.add('done');
+            if(window.importContext === id) updateImportBtnUI(id);
+        }
+
+        function onFilterChange() { if (window.py_refreshDataView) window.py_refreshDataView(); }
+        
+        function clearFilter() { if (window.py_clearFilter) window.py_clearFilter(); }
+
+        function toggleMA(ma) {
+            if (ma === 'ALL') {
+                window.selectedMAs.clear();
+                window.selectedMAs.add('ALL');
+            } else {
+                window.selectedMAs.delete('ALL');
+                if (window.selectedMAs.has(ma)) window.selectedMAs.delete(ma);
+                else window.selectedMAs.add(ma);
+                
+                if (window.selectedMAs.size === 0) window.selectedMAs.add('ALL');
+            }
+            updateMAButonsUI();
+            onFilterChange();
+        }
+
+        function updateMAButonsUI() {
+            document.querySelectorAll('.ma-btn').forEach(btn => {
+                if (window.selectedMAs.has(btn.getAttribute('data-ma'))) {
+                    btn.classList.add('active'); btn.classList.remove('inactive');
+                } else {
+                    btn.classList.remove('active'); btn.classList.add('inactive');
+                }
+            });
+        }
+
+        function renderMABUTTONS(mas) {
+            const container = document.getElementById("ma-buttons-container");
+            let html = `<button class="ma-btn ${window.selectedMAs.has('ALL') ? 'active' : 'inactive'}" data-ma="ALL" onclick="toggleMA('ALL')">TODAS</button>`;
+            mas.forEach(m => {
+                const isActive = window.selectedMAs.has(m) ? 'active' : 'inactive';
+                html += `<button class="ma-btn ${isActive}" data-ma="${m}" onclick="toggleMA('${m}')">MA ${m}</button>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function update_progress(pct, text) {
+            const container = document.getElementById('status-container');
+            const bar = document.getElementById('progress-bar');
+            container.classList.remove('hidden'); bar.style.width = pct + '%';
+            document.getElementById('status-text').innerText = text; document.getElementById('status-pct').innerText = pct + '%';
+            if (pct >= 100) setTimeout(() => container.classList.add('hidden'), 2000);
+        }
+
+        function exportExcel() { window.py_exportExcel(); }
+        
+        function takeScreenshot() { 
+            addLog("A processar a imagem do painel, por favor aguarde...", "text-yellow-400");
+            html2canvas(document.body, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: '#f1f5f9'
+            }).then(c => { 
+                let l = document.createElement('a'); 
+                l.download = `Dashboard_${Date.now()}.png`; 
+                l.href = c.toDataURL('image/png'); 
+                l.click(); 
+                addLog("SUCESSO: Imagem gerada e transferida.", "text-blue-400");
+            }).catch(err => {
+                addLog("ERRO: Falha ao capturar a imagem da tela.", "text-red-500");
+                console.error(err);
+            }); 
+        }
+        
+        async function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            let rawRows = Array.from(document.getElementById('table-body').querySelectorAll('tr'));
+            if (rawRows.length === 0) {
+                alert("Não há dados para gerar o PDF.");
+                return;
+            }
+            
+            let rows = rawRows.map(tr => {
+                let cells = Array.from(tr.cells);
+                return [
+                    cells[0].innerText, // Eq
+                    cells[1].innerText, // MA
+                    cells[2].innerText, // Nome (inclui * se bolsa)
+                    cells[3].innerText, // Nasc
+                    cells[4].innerText, // ID
+                    cells[5].innerText, // Endereço
+                    cells[6].getAttribute('data-raw-audit') || cells[6].innerText // Auditoria bruta
+                ];
+            });
+            
+            rows.sort((a, b) => {
+                let eqA = (a[0] || "N/I").toString().trim();
+                let eqB = (b[0] || "N/I").toString().trim();
+                if (eqA !== eqB) return eqA.localeCompare(eqB, undefined, { numeric: true, sensitivity: 'base' });
+                
+                let maA_str = (a[1] || "N/I").toString().trim();
+                let maB_str = (b[1] || "N/I").toString().trim();
+                if (maA_str !== maB_str) return maA_str.localeCompare(maB_str, undefined, { numeric: true, sensitivity: 'base' });
+                
+                let endA = (a[5] || "").toString().trim();
+                let endB = (b[5] || "").toString().trim();
+                return endA.localeCompare(endB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+            
+            let finalBody = [];
+            let currentGroup = "";
+
+            rows.forEach(r => {
+                let eq = r[0] || "N/I";
+                let ma = r[1] || "N/I";
+                let groupKey = `EQUIPE: ${eq}   |   MICROÁREA: ${ma}`;
+                
+                if (groupKey !== currentGroup) {
+                    finalBody.push([{ 
+                        content: groupKey, 
+                        colSpan: 5, 
+                        styles: { fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9, cellPadding: 3 } 
+                    }]);
+                    currentGroup = groupKey;
+                }
+                
+                let cleanAudit = (r[6] || "")
+                    .replace(/✅/g, '(OK)')
+                    .replace(/❌/g, '(PND)')
+                    .replace(/➖/g, '(N/A)')
+                    .split("|")
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0)
+                    .join("\n");
+                    
+                finalBody.push([
+                    r[2], // Nome
+                    r[3], // Nasc
+                    r[4], // ID
+                    r[5], // Endereço
+                    cleanAudit 
+                ]);
+            });
+
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.text("Relatório de Auditoria Ativa - Prazos e Acompanhamento", 14, 15);
+            
+            let indSelect = document.getElementById("indicator-filter");
+            let subTitle = indSelect.options[indSelect.selectedIndex].text;
+            let dateStr = new Date().toLocaleDateString('pt-BR');
+            let timeStr = new Date().toLocaleTimeString('pt-BR');
+            
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Indicador: ${subTitle}  |  Gerado em: ${dateStr} às ${timeStr}`, 14, 21);
+
+            doc.autoTable({ 
+                head: [['Paciente', 'Nasc.', 'CPF/CNS', 'Endereço Completo', 'Auditoria e Orientação ACS']], 
+                body: finalBody, 
+                startY: 25, 
+                styles: { fontSize: 7, cellPadding: 2.5, valign: 'middle', overflow: 'linebreak', lineColor: [226, 232, 240], lineWidth: 0.1 }, 
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'left' },
+                columnStyles: {
+                    0: { cellWidth: 45, fontStyle: 'bold', textColor: [15, 23, 42] }, 
+                    1: { cellWidth: 18, halign: 'center' }, 
+                    2: { cellWidth: 28, halign: 'center' }, 
+                    3: { cellWidth: 45 }, 
+                    4: { cellWidth: 'auto', textColor: [51, 65, 85] } 
+                },
+                theme: 'grid'
+            });
+            
+            doc.save(`AuditMaster_Relatorio_${Date.now()}.pdf`);
+        }
+        
+        document.getElementById("file-input").onchange = (e) => { if(window.py_processFiles) window.py_processFiles(e); };
+    </script>
+
+    <py-config>
+        packages = ["pandas", "openpyxl", "python-dateutil"]
+    </py-config>
+
+    <script type="py">
+import pandas as pd
+import io
+import datetime
+import re
+import asyncio
+import csv
+import unicodedata
+from pyodide.ffi import create_proxy, to_js
+from js import document, Uint8Array, window, URL, Blob, update_progress, markIndicatorAsDone, addLog
+from dateutil import parser
+
+COLUNAS_PADRAO = ['UNIDADE',
+'FONTE', 'INDICADOR', 'DATA_REF', 'EQUIPE', 'MICROAREA', 'NOME', 'DATA_NASCIMENTO', 'IDADE', 'BOLSA_FAMILIA',
+'CPF', 'CNS', 'ENDERECO', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+'AUDIT', 'INT_MED', 'INT_ENF', 'DATA_ANTROPO', 'DATA_ULTIMA_VISITA_ACS',
+'DATA_PENULTIMA_VISTA_ACS', 'DATA_INFLU', 'DATA_PA', 'DATA_HEMO', 'DATA_SOLICITA_HEMO',
+'DATA_PE', 'DATA_EXAME_COLO', 'DATA_ATEND_SEXUAL', 'DATA_CANCER_MAMA', 'DATA_1A_CONSULTA', 'DATA_VISITA_ACS_1', 'DATA_VISITA_ACS_2', 'DATA_DUM', 'IDADE_1A_CONSULTA', 'N_PUERP', 'N_VISITAS_PUERP', 'N_ODONTO_PRE_NATAL',
+'N_CONSULTA_30DIAS', 'N_ATEND_PUER', 'N_ANTROPO_24MESES',
+'N_PRE_NATAL_12', 'N_PRE_NATAL', 'N_PA', 'N_ANTROPO', 'N_VISITAS_PRE_NATAL', 'DTPA',
+'EXAME_HIV_PRIMEIRO', 'EXAME_SIF_PRIMEIRO', 'EXAME_HEP_B_PRIMEIRO', 'EXAME_HEP_C_PRIMEIRO',
+'EXAME_HIV_TERCEIRO', 'EXAME_SIF_TERCEIRO', 'EXAME_CANCER_COLO', 'EXAME_CANCER_COLO_AVAL', 'EXAME_CANCER_MAMA_SOLIC', 'EXAME_CANCER_MAMA_REAL', 'EXAME_CANCER_MAMA_AVAL', 'VACINA_GRUPO1', 'VACINA_GRUPO2', 'VACINA_PNEUMO', 'VACINA_HPV', 'VACINA_POLIO'
+]
+
+INDICATOR_LOGIC = {
+    "C2": {"title": "Desenvolvimento Infantil", "A": "Consulta até 30 dias", "B": "09 consultas PN", "C": "09 Peso/Alt", "D": "02 Visitas ACS", "E": "Vacinação em Dia"},
+    "C3": {"title": "Gestação e Puerpério", "A": "1ª Consulta até 12ª sem", "B": "07 Consultas", "C": "Aferição de PA", "D": "Peso/Altura", "E": "03 Visitas ACS PN", "F": "Vacina dTpa", "G": "Exames 1º Tri", "H": "Exames 3º Tri", "I": "Consulta Puerpério", "J": "Visita Puerpério", "K": "Odonto PN"},
+    "C4": {"title": "Cuidado da Pessoa com Diabetes", "A": "Consulta 6m", "B": "Aferição PA 6m", "C": "Peso/Alt 12m", "D": "2 Visitas ACS", "E": "HbA1c 12m", "F": "Exame Pés 12m"},
+    "C5": {"title": "Hipertensão", "A": "Consulta 06m", "B": "Aferição PA 06m", "C": "Peso/Alt 12m", "D": "2 Visitas ACS 12m"},
+    "C6": {"title": "Pessoa Idosa", "A": "Consulta 12m", "B": "Peso/Alt 12m", "C": "2 Visitas ACS 12m", "D": "Vacina Influenza"},
+    "C7": {"title": "Prevenção do Câncer", "A": "Prev. Colo (25-64a)", "B": "Vacina HPV (Fem 9-14a)", "C": "Saúde Sexual (14-69a)", "D": "Mamografia (50-69a)"}
+}
+
+raw_db = []
+current_view_data = []
+processed_signatures = set()
+active_filter_stat = None
+
+def slugify_col(s):
+    if pd.isna(s) or s is None:
+        return ""
+    s_str = str(s)
+    s_str = "".join(c for c in unicodedata.normalize('NFKD', s_str) if not unicodedata.combining(c))
+    return re.sub(r'[^a-z0-9]', '', s_str.lower())
+
+def clean_equipe(val):
+    if not val or pd.isna(val): return "N/I"
+    s = str(val).strip()
+    if s.lower() in ["nan", "none", ""]: return "N/I"
+    match = re.search(r'\d{10}', s)
+    if match: return match.group(0)
+    if "," in s: s = s.split(",")[-1].strip()
+    digits = re.sub(r'\D', '', s)
+    if len(digits) >= 4: return digits
+    return s
+
+def remove_accents(s):
+    if s: return "".join(c for c in unicodedata.normalize('NFKD', str(s)) if not unicodedata.combining(c))
+    return ""
+
+def clean_id(v):
+    if pd.isna(v): return None
+    s = re.sub(r'[\.\-\s\/]', '', str(v).strip())
+    if s and s.lower() not in ["nan", "none", "0"]: return s
+    return None
+
+def format_dt_br(v):
+    if pd.isna(v) or not str(v).strip() or str(v).upper() in ["NAN", "NAT", "NONE"]: return "-"
+    s = str(v).strip()
+    if " " in s and ("/" in s or "-" in s): s = s.split(" ")[0]
+    
+    m_iso = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', s)
+    if m_iso:
+        return f"{m_iso.group(3)}/{m_iso.group(2)}/{m_iso.group(1)}"
+        
+    m_br = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', s)
+    if m_br:
+        return s
+        
+    try:
+        if s.replace('.', '', 1).isdigit() and float(s) > 2000:
+            dt = pd.to_datetime(float(s), unit='D', origin='1899-12-30')
+            return dt.strftime("%d/%m/%Y")
+        dt = parser.parse(s, dayfirst=True)
+        return dt.strftime("%d/%m/%Y")
+    except: 
+        if " a " in s and len(s) < 25: return s.title()
+        return s
+
+def is_bolsa_familia(v):
+    val = str(v).lower().strip()
+    return val in ["sim", "x", "1", "true", "beneficiario", "beneficiário", "sim (x)"] or "sim" in val
+
+def find_dynamic_header(df):
+    h_idx = -1
+    for r_i in range(min(50, len(df))):
+        row_vals = [slugify_col(x) for x in df.iloc[r_i] if pd.notna(x)]
+        has_name = any("cidadao" in slug or "paciente" in slug or "gestante" in slug or "nome" in slug for slug in row_vals)
+        has_doc = any("cpf" in slug or "cns" in slug or "nascimento" in slug for slug in row_vals)
+        if has_name and has_doc:
+            h_idx = r_i
+            break
+    return h_idx
+
+def build_address(row, idx_tipo, idx_rua, idx_num, idx_compl):
+    tipo = str(row.iloc[idx_tipo]).strip() if idx_tipo != -1 and pd.notna(row.iloc[idx_tipo]) else ""
+    if tipo.lower() in ["não informada", "nao informada", "-", "nan", "none"]: tipo = ""
+    
+    rua = str(row.iloc[idx_rua]).strip() if idx_rua != -1 and pd.notna(row.iloc[idx_rua]) else ""
+    if rua.lower() in ["nan", "none", "-"]: rua = ""
+    
+    num = str(row.iloc[idx_num]).strip() if idx_num != -1 and pd.notna(row.iloc[idx_num]) else ""
+    if num.lower() in ["nan", "none", "-"]: num = ""
+    
+    compl = str(row.iloc[idx_compl]).strip() if idx_compl != -1 and pd.notna(row.iloc[idx_compl]) else ""
+    if compl.lower() in ["nan", "none", "-"]: compl = ""
+
+    rua_completa = f"{tipo} {rua}".strip()
+    res = f"{rua_completa}, {num} {compl}".strip(", ")
+    return res if res and res != "," else "-"
+
+async def process_files(e):
+    global raw_db, processed_signatures
+    files = e.target.files
+    if not files: return
+    
+    import_ctx = str(window.importContext)
+    update_progress(10, f"Acionando Motor {import_ctx}...")
+    await asyncio.sleep(0.1)
+    any_new_data = False
+    
+    try:
+        for i in range(files.length):
+            f = files.item(i)
+            fname = f.name
+            fsize = f.size
+            buf = await f.arrayBuffer()
+            fb = Uint8Array.new(buf).to_py()
+            
+            try:
+                if fname.lower().endswith('.csv'):
+                    raw_bytes = fb.tobytes()
+                    try: content = raw_bytes.decode('utf-8-sig')
+                    except UnicodeDecodeError: content = raw_bytes.decode('latin1')
+                    
+                    lines = content.splitlines()
+                    delim = ','
+                    sample_idx = min(15, len(lines) - 1)
+                    if sample_idx >= 0:
+                        if lines[sample_idx].count(';') > lines[sample_idx].count(','): delim = ';'
+                            
+                    reader = csv.reader(lines, delimiter=delim)
+                    parsed_data = list(reader)
+                    df_csv = pd.DataFrame(parsed_data)
+                    sheets = {"CSV_DATA": df_csv}
+                else:
+                    sheets = pd.read_excel(io.BytesIO(fb.tobytes()), sheet_name=None, dtype=str, header=None)
+                    
+                for sname, df in sheets.items():
+                    if len(df) < 5: continue
+                    
+                    fonte_raw = str(df.iloc[0, 0]).upper() if len(df.columns) > 0 else ""
+                    if "E-SUS" in fonte_raw: fonte = "PEC"
+                    else: fonte = "SIAPS"
+                    
+                    sig = f"{fname}_{fsize}_{fonte}_{import_ctx}_{sname}"
+                    if sig in processed_signatures:
+                        addLog(f"AVISO: Arquivo já processado e ignorado (Prevenção de Duplicidade).", "text-yellow-400")
+                        continue
+                    
+                    if import_ctx == "SIAPS":
+                        if fonte != "SIAPS":
+                            addLog(f"BLOQUEIO ESTRITO: O botão SIAPS aceita APENAS arquivos SIAPS.", "text-red-500")
+                            continue
+                            
+                        sample = remove_accents(" ".join([str(x) for x in df.iloc[0:65, 0] if pd.notna(x)])).upper()
+                        det_ind = "OUTRO"
+                        
+                        if "CUIDADO DA MULHER E DO HOMEM TRANSGENERO NA PREVENCAO DO CANCER" in sample: det_ind = "C7"
+                        elif "DESENVOLVIMENTO INFANTIL" in sample: det_ind = "C2"
+                        elif "GESTA" in sample or "PUERPERIO" in sample: det_ind = "C3"
+                        elif "DIABETES" in sample: det_ind = "C4"
+                        elif "HIPERTENSAO" in sample: det_ind = "C5"
+                        elif "PESSOA IDOSA" in sample: det_ind = "C6"
+                        
+                        count = engine_capture_siaps(df, det_ind)
+                        if count > 0:
+                            addLog(f"SUCESSO: Motor SIAPS | Detectado: {det_ind} | Registros: {count}", "text-emerald-400")
+                            any_new_data = True
+                            processed_signatures.add(sig)
+                            
+                    else:
+                        if fonte != "PEC":
+                            addLog(f"BLOQUEIO ESTRITO: O botão {import_ctx} aceita APENAS relatórios do e-SUS/PEC.", "text-red-500")
+                            continue
+                            
+                        # -> NOVO FILTRO ESTRITO DE CABEÇALHO PARA ARQUIVOS PEC
+                        sample_pec = remove_accents(" ".join([str(x) for x in df.iloc[0:20, 0] if pd.notna(x)])).upper()
+                        det_ind_pec = "OUTRO"
+                        
+                        if "CUIDADO DA MULHER" in sample_pec or "CANCER" in sample_pec: det_ind_pec = "C7"
+                        elif "DESENVOLVIMENTO INFANTIL" in sample_pec: det_ind_pec = "C2"
+                        elif "GESTA" in sample_pec or "PUERPERIO" in sample_pec: det_ind_pec = "C3"
+                        elif "DIABETES" in sample_pec: det_ind_pec = "C4"
+                        elif "HIPERTENSAO" in sample_pec: det_ind_pec = "C5"
+                        elif "PESSOA IDOSA" in sample_pec: det_ind_pec = "C6"
+
+                        if det_ind_pec != "OUTRO" and det_ind_pec != import_ctx:
+                            addLog(f"BLOQUEIO ESTRITO: Você tentou importar uma planilha de {det_ind_pec} no botão {import_ctx}. Operação cancelada.", "text-red-500")
+                            continue
+                        # <- FIM DO NOVO FILTRO ESTRITO
+
+                        equipe_ext = "N/I"
+                        data_ref_ext = "-"
+                        
+                        try:
+                            val_eq = str(df.iloc[9, 1]).strip() if len(df.columns) > 1 else ""
+                            if val_eq and val_eq.lower() not in ["nan", "none", ""]: equipe_ext = clean_equipe(val_eq)
+                        except: pass
+                        
+                        try:
+                            for r_idx in range(18, 30):
+                                label = str(df.iloc[r_idx, 0]).lower()
+                                if "gerado em" in label or "competencia" in label or "referencia" in label:
+                                    if len(df.columns) > 1:
+                                        v_ref_dyn = str(df.iloc[r_idx, 1]).strip()
+                                        if v_ref_dyn and v_ref_dyn.lower() not in ["nan", "none", ""]: 
+                                            data_ref_ext = format_dt_br(v_ref_dyn)
+                                            break
+                        except: pass
+                        
+                        if equipe_ext == "N/I":
+                            for r_idx in range(min(25, len(df))):
+                                for c_idx in range(min(5, len(df.columns))):
+                                    val_str = remove_accents(str(df.iloc[r_idx, c_idx]).lower())
+                                    if "equipe" in val_str and equipe_ext == "N/I":
+                                        for off in range(1, 4):
+                                            if c_idx+off < len(df.columns) and pd.notna(df.iloc[r_idx, c_idx+off]):
+                                                c = str(df.iloc[r_idx, c_idx+off]).strip()
+                                                if c.lower() not in ["nan", "none", ""]:
+                                                    equipe_ext = clean_equipe(c)
+                                                    break
+                                        break
+                                if equipe_ext != "N/I": break
+                        
+                        if import_ctx == "C2":
+                            count = engine_capture_pec_c2(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C2 (Validação Data de Referência) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Aba vazia ou incompatível com PEC C2.", "text-rose-400")
+                                
+                        elif import_ctx == "C3":
+                            count = engine_capture_pec_c3(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C3 (Validação Data de Referência) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Aba vazia ou incompatível com PEC C3.", "text-rose-400")
+                                
+                        elif import_ctx == "C4":
+                            count = engine_capture_pec_c4(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C4 (Leitura Exata Literal) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Falha ao ler registros C4 (Diabetes). Verifique a estrutura.", "text-rose-400")
+                                
+                        elif import_ctx == "C5":
+                            count = engine_capture_pec_c5(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C5 (Match Exato) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Falha ao ler registros C5 (Hipertensão).", "text-rose-400")
+                                
+                        elif import_ctx == "C6":
+                            count = engine_capture_pec_c6(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C6 (Match Exato) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Falha ao ler registros C6 (Pessoa Idosa).", "text-rose-400")
+
+                        elif import_ctx == "C7":
+                            count = engine_capture_pec_c7(df, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor PEC C7 (Auditoria Detalhada Colo/Mama) | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Falha ao ler registros C7 (Prevenção Câncer).", "text-rose-400")
+                                
+                        else:
+                            count = engine_capture_pec_generic(df, import_ctx, equipe_ext, data_ref_ext)
+                            if count > 0:
+                                addLog(f"SUCESSO: Motor Genérico {import_ctx} | Registros: {count}", "text-emerald-400")
+                                any_new_data = True
+                                processed_signatures.add(sig)
+                            else: addLog(f"ERRO: Falha ao ler registros PEC {import_ctx}.", "text-rose-400")
+                                
+            except Exception as ex: addLog(f"ERRO DE LEITURA DO ARQUIVO: {str(ex)}", "text-red-400")
+                
+    except Exception as general_ex: addLog(f"ERRO GERAL: {str(general_ex)}", "text-red-400")
+        
+    finally:
+        document.getElementById("file-input").value = ""
+        if any_new_data: markIndicatorAsDone(import_ctx)
+        try:
+            update_filter_lists()
+            refresh_data_view()
+        except Exception as e_view: addLog(f"Erro ao atualizar visualização: {str(e_view)}", "text-red-400")
+        update_progress(100, "Carga Concluída.")
+
+def engine_capture_pec_c2(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+    
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["Cidadao"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Nome"], ["mae", "logradouro", "equipe"])
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+    
+    idx_tipo_logradouro = find_idx_flex(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx_flex(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["endereco"])
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+    
+    idx_dt_1a_cons = headers_slug.index(slugify_col("Data da primeira consulta")) if slugify_col("Data da primeira consulta") in headers_slug else -1
+    idx_id_1a_cons = headers_slug.index(slugify_col("Idade na primeira consulta")) if slugify_col("Idade na primeira consulta") in headers_slug else -1
+    idx_n_cons = headers_slug.index(slugify_col("Quantidade de consultas até 24 meses")) if slugify_col("Quantidade de consultas até 24 meses") in headers_slug else -1
+    idx_n_peso = headers_slug.index(slugify_col("Quantidade de medições de peso/altura simultâneas até 24 meses")) if slugify_col("Quantidade de medições de peso/altura simultâneas até 24 meses") in headers_slug else -1
+    
+    idx_v1_dt = headers_slug.index("datadaprimeiravisitadomiciliar") if "datadaprimeiravisitadomiciliar" in headers_slug else -1
+    idx_v2_dt = headers_slug.index("datadasegundavisitadomiciliar") if "datadasegundavisitadomiciliar" in headers_slug else -1
+    
+    idx_v_penta = headers_slug.index(slugify_col("Difteria, Tétano, Pertusis, Hepatite B, Haemophilus Influenza B")) if slugify_col("Difteria, Tétano, Pertusis, Hepatite B, Haemophilus Influenza B") in headers_slug else -1
+    idx_v_triple = headers_slug.index(slugify_col("Sarampo, Caxumba, Rubéola")) if slugify_col("Sarampo, Caxumba, Rubéola") in headers_slug else -1
+    idx_v_pneumo = headers_slug.index(slugify_col("Pneumocócica")) if slugify_col("Pneumocócica") in headers_slug else -1
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.lower() in ["nan", "none"]: idade_val = ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C2', 'INDICADOR_KEY': 'C2', 'DATA_REF': data_ref_fallback, 'EQUIPE': equipe_fallback, 
+            'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val,
+            'BOLSA_FAMILIA': bolsa_val, 'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_num(idx):
+            if idx == -1: return 0
+            val = str(row.iloc[idx]).strip().lower()
+            if val in ["", "nan", "none", "-"]: return 0
+            res = re.sub(r'\D', '', val)
+            return int(res) if res else 0
+            
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+
+        r['DATA_1A_CONSULTA'] = get_str(idx_dt_1a_cons)
+        r['IDADE_1A_CONSULTA'] = get_str(idx_id_1a_cons)
+        r['N_ATEND_PUER'] = str(get_num(idx_n_cons))
+        r['N_ANTROPO_24MESES'] = str(get_num(idx_n_peso))
+        r['DATA_VISITA_ACS_1'] = format_dt_br(get_str(idx_v1_dt))
+        r['DATA_VISITA_ACS_2'] = format_dt_br(get_str(idx_v2_dt))
+        r['VACINA_GRUPO1'] = get_str(idx_v_penta)
+        r['VACINA_GRUPO2'] = get_str(idx_v_triple)
+        r['VACINA_PNEUMO'] = get_str(idx_v_pneumo)
+        
+        audit = []
+        val_dt_1a = format_dt_br(r['DATA_1A_CONSULTA'])
+        val_id_1a = r['IDADE_1A_CONSULTA']
+        
+        dt_nasc = None
+        idade_base_dias = 0
+        if nasc_val != "-":
+            try:
+                dt_nasc = parser.parse(nasc_val, dayfirst=True)
+                idade_base_dias = (base_date - dt_nasc).days
+            except: pass
+
+        # ITEM A: 1ª Consulta
+        a_ok = False
+        if val_dt_1a != "-":
+            try:
+                dt_1a = parser.parse(val_dt_1a, dayfirst=True)
+                if dt_nasc:
+                    if (dt_1a - dt_nasc).days <= 30: a_ok = True
+                else:
+                    if r['IDADE_1A_CONSULTA']:
+                        n_id = int(re.sub(r'\D', '', r['IDADE_1A_CONSULTA']) or 0)
+                        if "mes" in r['IDADE_1A_CONSULTA'].lower(): n_id *= 30
+                        elif "ano" in r['IDADE_1A_CONSULTA'].lower(): n_id *= 365
+                        if n_id <= 30: a_ok = True
+            except: pass
+        
+        if a_ok:
+            r['A'] = 'X'; audit.append(f"✅ A: 1ª Cons. no Prazo ({val_dt_1a})")
+        else:
+            r['A'] = '-'
+            if val_dt_1a != "-":
+                audit.append(f"❌ A: Ponto Perdido - 1ª Cons. fora do prazo ({val_dt_1a})")
+            else:
+                if idade_base_dias > 30:
+                    audit.append("❌ A: Ponto Perdido - Não fez 1ª Cons. nos 30d iniciais")
+                else:
+                    lim = dt_nasc + datetime.timedelta(days=30) if dt_nasc else base_date
+                    audit.append(f"❌ A: Agendar 1ª Cons. Urgente (até {lim.strftime('%d/%m/%Y')})")
+
+        # ITEM B: 9 Consultas
+        nc = int(r['N_ATEND_PUER']) if r['N_ATEND_PUER'].isdigit() else 0
+        if nc >= 9:
+            r['B'] = 'X'; audit.append(f"✅ B: {nc} Consultas Méd/Enf OK")
+        else:
+            r['B'] = '-'
+            if idade_base_dias > 730:
+                audit.append(f"❌ B: Ponto Perdido - Apenas {nc}/9 e criança > 2 anos")
+            else:
+                audit.append(f"❌ B: Faltam {9-nc} Consultas (Agendar antes dos 2 anos)")
+
+        # ITEM C: 9 Medições Peso/Alt
+        np = int(r['N_ANTROPO_24MESES']) if r['N_ANTROPO_24MESES'].isdigit() else 0
+        if np >= 9:
+            r['C'] = 'X'; audit.append(f"✅ C: {np} Medições de Peso/Alt OK")
+        else:
+            r['C'] = '-'
+            if idade_base_dias > 730:
+                audit.append(f"❌ C: Ponto Perdido - Apenas {np}/9 e criança > 2 anos")
+            else:
+                audit.append(f"❌ C: Faltam {9-np} Peso/Alt (Agendar antes dos 2 anos)")
+
+        # ITEM D: 2 Visitas ACS (Rigor nas datas)
+        v1 = r['DATA_VISITA_ACS_1']
+        v2 = r['DATA_VISITA_ACS_2']
+        v1_ok = False
+        v2_ok = False
+        msg_d = []
+        
+        if v1 != "-" and dt_nasc:
+            try:
+                dt_v1 = parser.parse(v1, dayfirst=True)
+                if (dt_v1 - dt_nasc).days <= 30: v1_ok = True
+                else: msg_d.append(f"1ª visita ({v1}) fora do prazo de 30d")
+            except: pass
+        else: msg_d.append("Falta 1ª visita (prazo 30d)")
+        
+        if v2 != "-" and dt_nasc:
+            try:
+                dt_v2 = parser.parse(v2, dayfirst=True)
+                if (dt_v2 - dt_nasc).days <= 182: v2_ok = True
+                else: msg_d.append(f"2ª visita ({v2}) fora do prazo de 6 meses")
+            except: pass
+        else: msg_d.append("Falta 2ª visita (prazo 6m)")
+
+        if v1_ok and v2_ok:
+            r['D'] = 'X'; audit.append(f"✅ D: 2 Visitas ACS no prazo OK ({v1} e {v2})")
+        else:
+            r['D'] = '-'
+            if idade_base_dias > 182:
+                audit.append(f"❌ D: Ponto Perdido - Criança já tem > 6 meses e: {', '.join(msg_d)}")
+            else:
+                audit.append(f"❌ D: Pendente - {', '.join(msg_d)}")
+
+        # ITEM E: Vacinas
+        def check_vac(v):
+            vu = str(v).upper()
+            return bool(vu and vu not in ["NAN", "NONE", "-", "NÃO", "NAO", "0", "FALSO"])
+
+        vac1 = check_vac(r['VACINA_GRUPO1'])
+        vac2 = check_vac(r['VACINA_GRUPO2'])
+        vac3 = check_vac(r['VACINA_PNEUMO'])
+
+        if vac1 and vac2 and vac3: r['E'] = 'X'; audit.append("✅ E: Vacinação VIP/Penta/Pneumo/Tri OK")
+        else:
+            r['E'] = '-'
+            faltam = []
+            if not vac1: faltam.append("VIP/Penta")
+            if not vac2: faltam.append("Tríplice")
+            if not vac3: faltam.append("Pneumo")
+            if idade_base_dias > 730:
+                audit.append(f"❌ E: Ponto Perdido - Faltou vacina ({', '.join(faltam)}) aos 2 anos")
+            else:
+                audit.append(f"❌ E: Atualizar Vacinas ({', '.join(faltam)})")
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_c3(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["Gestante"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Nome"], ["mae", "logradouro", "equipe"])
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+    
+    idx_tipo_logradouro = find_idx_flex(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx_flex(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["endereco"])
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+    
+    idx_a = headers_slug.index(slugify_col("Quantidade de atendimentos até 12 semanas no pré-natal")) if slugify_col("Quantidade de atendimentos até 12 semanas no pré-natal") in headers_slug else -1
+    idx_b = headers_slug.index(slugify_col("Quantidade de atendimentos no pré-natal")) if slugify_col("Quantidade de atendimentos no pré-natal") in headers_slug else -1
+    idx_c = headers_slug.index(slugify_col("Quantidade de medições de pressão arterial")) if slugify_col("Quantidade de medições de pressão arterial") in headers_slug else -1
+    idx_d = headers_slug.index(slugify_col("Quantidade de medições simultâneas de peso e altura")) if slugify_col("Quantidade de medições simultâneas de peso e altura") in headers_slug else -1
+    idx_e = headers_slug.index(slugify_col("Quantidade de visitas domiciliares no pré-natal")) if slugify_col("Quantidade de visitas domiciliares no pré-natal") in headers_slug else -1
+    idx_f_vac = headers_slug.index(slugify_col("dTpa")) if slugify_col("dTpa") in headers_slug else -1
+    idx_dum = headers_slug.index(slugify_col("DUM")) if slugify_col("DUM") in headers_slug else -1
+    idx_g_hiv = headers_slug.index(slugify_col("Exame de HIV no primeiro trimestre")) if slugify_col("Exame de HIV no primeiro trimestre") in headers_slug else -1
+    idx_g_sif = headers_slug.index(slugify_col("Exame de Sífilis no primeiro trimestre")) if slugify_col("Exame de Sífilis no primeiro trimestre") in headers_slug else -1
+    idx_g_hepb = headers_slug.index(slugify_col("Exame de Hepatite B no primeiro trimestre")) if slugify_col("Exame de Hepatite B no primeiro trimestre") in headers_slug else -1
+    idx_g_hepc = headers_slug.index(slugify_col("Exame de Hepatite C no primeiro trimestre")) if slugify_col("Exame de Hepatite C no primeiro trimestre") in headers_slug else -1
+    idx_h_hiv = headers_slug.index(slugify_col("Exame de HIV no terceiro trimestre")) if slugify_col("Exame de HIV no terceiro trimestre") in headers_slug else -1
+    idx_h_sif = headers_slug.index(slugify_col("Exame de Sífilis no terceiro trimestre")) if slugify_col("Exame de Sífilis no terceiro trimestre") in headers_slug else -1
+    idx_i = headers_slug.index(slugify_col("Quantidade de atendimentos no puerpério")) if slugify_col("Quantidade de atendimentos no puerpério") in headers_slug else -1
+    idx_j = headers_slug.index(slugify_col("Quantidade de visitas domiciliares no puerpério")) if slugify_col("Quantidade de visitas domiciliares no puerpério") in headers_slug else -1
+    idx_k = headers_slug.index(slugify_col("Quantidade de atendimentos odontológicos no pré-natal")) if slugify_col("Quantidade de atendimentos odontológicos no pré-natal") in headers_slug else -1
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+    
+    ref_date_cmp = base_date.date()
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.lower() in ["nan", "none"]: idade_val = ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C3', 'INDICADOR_KEY': 'C3', 'DATA_REF': data_ref_fallback, 'EQUIPE': equipe_fallback, 
+            'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val,
+            'BOLSA_FAMILIA': bolsa_val, 'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_num(idx):
+            if idx == -1: return 0
+            val = str(row.iloc[idx]).strip().lower()
+            if val in ["", "nan", "none", "-"]: return 0
+            res = re.sub(r'\D', '', val)
+            return int(res) if res else 0
+            
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+
+        n_a = get_num(idx_a)
+        n_b = get_num(idx_b)
+        n_c = get_num(idx_c)
+        n_d = get_num(idx_d)
+        n_e = get_num(idx_e)
+        val_f = get_str(idx_f_vac)
+        val_dum = get_str(idx_dum)
+        v_g_hiv = get_str(idx_g_hiv)
+        v_g_sif = get_str(idx_g_sif)
+        v_g_hepb = get_str(idx_g_hepb)
+        v_g_hepc = get_str(idx_g_hepc)
+        v_h_hiv = get_str(idx_h_hiv)
+        v_h_sif = get_str(idx_h_sif)
+        n_i = get_num(idx_i)
+        n_j = get_num(idx_j)
+        n_k = get_num(idx_k)
+        
+        r['N_PRE_NATAL_12'] = str(n_a)
+        r['N_PRE_NATAL'] = str(n_b)
+        r['N_PA'] = str(n_c)
+        r['N_ANTROPO'] = str(n_d)
+        r['N_VISITAS_PRE_NATAL'] = str(n_e)
+        r['DTPA'] = val_f
+        r['DATA_DUM'] = format_dt_br(val_dum) if val_dum and val_dum != "-" else ""
+        r['EXAME_HIV_PRIMEIRO'] = v_g_hiv
+        r['EXAME_SIF_PRIMEIRO'] = v_g_sif
+        r['EXAME_HEP_B_PRIMEIRO'] = v_g_hepb
+        r['EXAME_HEP_C_PRIMEIRO'] = v_g_hepc
+        r['EXAME_HIV_TERCEIRO'] = v_h_hiv
+        r['EXAME_SIF_TERCEIRO'] = v_h_sif
+        r['N_ATEND_PUER'] = str(n_i)
+        r['N_VISITAS_PUERP'] = str(n_j)
+        r['N_ODONTO_PRE_NATAL'] = str(n_k)
+        
+        audit = []
+        dum_date = dpp_date = None
+        dpp_str = ""
+        if r['DATA_DUM']:
+            try:
+                dum_date = parser.parse(r['DATA_DUM'], dayfirst=True)
+                dpp_date = dum_date + datetime.timedelta(days=280)
+                dpp_str = dpp_date.strftime('%d/%m/%Y')
+            except: pass
+        
+        if n_a >= 1:
+            r['A'] = 'X'; audit.append("✅ A: 1ª Consulta < 12 sem OK")
+        else: 
+            r['A'] = '-'
+            if dum_date:
+                limite_a = dum_date + datetime.timedelta(days=84)
+                if limite_a.date() < ref_date_cmp: audit.append(f"❌ A: Ponto Perdido - 1ª Cons <12s (Prazo final era {limite_a.strftime('%d/%m/%Y')})")
+                else: audit.append(f"❌ A: Fazer 1ª Cons <12s até {limite_a.strftime('%d/%m/%Y')}")
+            else: audit.append("❌ A: Pendente 1ª Cons <12s")
+
+        if n_b >= 7: r['B'] = 'X'; audit.append(f"✅ B: {n_b} Consultas PN OK")
+        else: r['B'] = '-'; audit.append(f"❌ B: Apenas {n_b}/7 Consultas PN")
+        
+        if n_c >= 7: r['C'] = 'X'; audit.append(f"✅ C: {n_c} PAs OK")
+        else: r['C'] = '-'; audit.append(f"❌ C: Apenas {n_c}/7 PAs")
+
+        if n_d >= 7: r['D'] = 'X'; audit.append(f"✅ D: {n_d} Pesos/Alturas OK")
+        else: r['D'] = '-'; audit.append(f"❌ D: Apenas {n_d}/7 Pesos/Alturas")
+
+        if n_e >= 3: r['E'] = 'X'; audit.append(f"✅ E: {n_e} Visitas ACS PN OK")
+        else: r['E'] = '-'; audit.append(f"❌ E: Apenas {n_e}/3 Visitas ACS PN (VISITAR HOJE)")
+
+        vu_f = str(val_f).strip().upper()
+        if vu_f and vu_f not in ["NAN", "NONE", "-", "NÃO", "NAO", "FALSO", "0"]: 
+            r['F'] = 'X'; audit.append("✅ F: Vacina dTpa OK")
+        else: 
+            r['F'] = '-'
+            if dum_date:
+                lim_f = dum_date + datetime.timedelta(days=140)
+                if ref_date_cmp >= lim_f.date(): audit.append(f"❌ F: Vacina dTpa Pendente (A partir de {lim_f.strftime('%d/%m/%Y')})")
+                else: audit.append(f"❌ F: Aguardar Vacina dTpa (A partir de {lim_f.strftime('%d/%m/%Y')})")
+            else: audit.append("❌ F: Pendente Vacina dTpa")
+
+        def has_ex(v):
+            vu = str(v).strip().upper()
+            return bool(vu and vu not in ["NAN", "NONE", "-", "NÃO", "NAO", "FALSO", "0", "NÃO AVALIADO", "NAO AVALIADO", "NÃO REALIZADO", "NAO REALIZADO"])
+
+        falsos_g = []
+        if not has_ex(v_g_hiv): falsos_g.append("HIV")
+        if not has_ex(v_g_sif): falsos_g.append("Sífilis")
+        if not has_ex(v_g_hepb): falsos_g.append("HepB")
+        if not has_ex(v_g_hepc): falsos_g.append("HepC")
+            
+        if not falsos_g: r['G'] = 'X'; audit.append("✅ G: Exames 1º Tri OK")
+        else: r['G'] = '-'; audit.append(f"❌ G: Pendente 1º Tri ({', '.join(falsos_g)})")
+
+        falsos_h = []
+        if not has_ex(v_h_hiv): falsos_h.append("HIV")
+        if not has_ex(v_h_sif): falsos_h.append("Sífilis")
+            
+        if not falsos_h: r['H'] = 'X'; audit.append("✅ H: Exames 3º Tri OK")
+        else: r['H'] = '-'; audit.append(f"❌ H: Pendente 3º Tri ({', '.join(falsos_h)})")
+
+        if n_i >= 1: r['I'] = 'X'; audit.append("✅ I: Cons. Puerpério OK")
+        else:
+            r['I'] = '-'
+            if dpp_date:
+                if dpp_date.date() < ref_date_cmp: audit.append(f"❌ I: Parto Previsto Passou (DPP: {dpp_str}) - Agendar Urgente!")
+                else: audit.append(f"❌ I: Pendente (Fazer após o parto. DPP: {dpp_str})")
+            else: audit.append("❌ I: Pendente Cons. Puerpério")
+
+        if n_j >= 1: r['J'] = 'X'; audit.append("✅ J: Visita Puerpério OK")
+        else:
+            r['J'] = '-'
+            if dpp_date:
+                if dpp_date.date() < ref_date_cmp: audit.append(f"❌ J: Parto Previsto Passou (DPP: {dpp_str}) - VISITAR HOJE!")
+                else: audit.append(f"❌ J: Pendente (Fazer após o parto. DPP: {dpp_str})")
+            else: audit.append("❌ J: Pendente Visita Puerpério")
+
+        if n_k >= 1: r['K'] = 'X'; audit.append("✅ K: Odonto OK")
+        else: r['K'] = '-'; audit.append("❌ K: Pendente Odonto")
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_c4(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["cidadao"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["paciente"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["nome"], ["mae", "logradouro", "equipe"])
+    
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+
+    idx_tipo_logradouro = find_idx_flex(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"]) 
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["endereco"], ["eletronico", "email"])
+    
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+
+    idx_mm_med = headers_slug.index(slugify_col("Meses desde o último atendimento médico")) if slugify_col("Meses desde o último atendimento médico") in headers_slug else -1
+    idx_dd_med = headers_slug.index(slugify_col("Dias desde o último atendimento médico")) if slugify_col("Dias desde o último atendimento médico") in headers_slug else -1
+    idx_mm_enf = headers_slug.index(slugify_col("Meses desde o último atendimento de enfermagem")) if slugify_col("Meses desde o último atendimento de enfermagem") in headers_slug else -1
+    idx_dd_enf = headers_slug.index(slugify_col("Dias desde o último atendimento de enfermagem")) if slugify_col("Dias desde o último atendimento de enfermagem") in headers_slug else -1
+    
+    idx_pa = headers_slug.index(slugify_col("Data da última medição de pressão arterial")) if slugify_col("Data da última medição de pressão arterial") in headers_slug else -1
+    
+    idx_antropo = headers_slug.index(slugify_col("Data da ultima medição de peso e altura")) if slugify_col("Data da ultima medição de peso e altura") in headers_slug else -1
+    if idx_antropo == -1:
+        idx_antropo = headers_slug.index(slugify_col("Data da última medição de peso e altura")) if slugify_col("Data da última medição de peso e altura") in headers_slug else -1
+
+    idx_visitas = headers_slug.index("ultimasvisitasdomiciliares") if "ultimasvisitasdomiciliares" in headers_slug else -1
+    
+    idx_hemo_aval = headers_slug.index(slugify_col("Data da última avaliação de hemoglobina glicada")) if slugify_col("Data da última avaliação de hemoglobina glicada") in headers_slug else -1
+    idx_hemo_solic = headers_slug.index(slugify_col("Data da última solicitação de hemoglobina glicada")) if slugify_col("Data da última solicitação de hemoglobina glicada") in headers_slug else -1
+    
+    idx_pe = headers_slug.index(slugify_col("Data da avaliação dos pés")) if slugify_col("Data da avaliação dos pés") in headers_slug else -1
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.lower() in ["nan", "none"]: idade_val = ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C4', 'INDICADOR_KEY': 'C4', 'DATA_REF': data_ref_fallback, 
+            'EQUIPE': equipe_fallback, 'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 
+            'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val, 'BOLSA_FAMILIA': bolsa_val, 
+            'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_num(idx):
+            if idx == -1: return None
+            val = str(row.iloc[idx]).strip().lower()
+            if val in ["", "nan", "none", "-"]: return None
+            res = re.sub(r'\D', '', val)
+            return int(res) if res else None
+            
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+
+        mm_med = get_num(idx_mm_med)
+        dd_med = get_num(idx_dd_med)
+        mm_enf = get_num(idx_mm_enf)
+        dd_enf = get_num(idx_dd_enf)
+        
+        def calc_int(mm, dd):
+            if mm is None and dd is None: return None
+            m = mm if mm is not None else 0
+            d = dd if dd is not None else 0
+            return (m * 30) + d
+
+        int_med = calc_int(mm_med, dd_med)
+        int_enf = calc_int(mm_enf, dd_enf)
+        
+        intervals = []
+        if int_med is not None: intervals.append(int_med)
+        if int_enf is not None: intervals.append(int_enf)
+            
+        min_int = min(intervals) if intervals else None
+        r['INT_MED'] = str(int_med) if int_med is not None else ""
+        r['INT_ENF'] = str(int_enf) if int_enf is not None else ""
+        
+        audit = []
+        if min_int is not None:
+            if min_int <= 182:
+                r['A'] = 'X'; venc = base_date - datetime.timedelta(days=min_int) + datetime.timedelta(days=182)
+                audit.append(f"✅ A: Cons. em dia (Há {min_int} dias). Vence: {venc.strftime('%d/%m/%Y')}")
+            else:
+                r['A'] = '-'; audit.append(f"❌ A: Cons. Vencida (Há {min_int} dias). Agendar Urgente!")
+        else:
+            r['A'] = '-'; audit.append("❌ A: Pendente Consulta")
+
+        def audit_date(raw_date_str, max_days, char, name):
+            if not raw_date_str or raw_date_str == "-":
+                r[char] = '-'; audit.append(f"❌ {char}: Pendente {name}")
+                return
+            try:
+                dt_str = format_dt_br(raw_date_str)
+                if dt_str == "-":
+                    r[char] = '-'; audit.append(f"❌ {char}: Pendente {name}")
+                    return
+                
+                dt = parser.parse(dt_str, dayfirst=True)
+                diff = (base_date - dt).days
+                if 0 <= diff <= max_days:
+                    r[char] = 'X'; venc = dt + datetime.timedelta(days=max_days)
+                    audit.append(f"✅ {char}: {name} OK ({dt.strftime('%d/%m/%Y')}). Vence: {venc.strftime('%d/%m/%Y')}")
+                else:
+                    r[char] = '-'
+                    if diff < 0: audit.append(f"❌ {char}: Data do sistema é futura ({dt.strftime('%d/%m/%Y')})")
+                    else: audit.append(f"❌ {char}: {name} Vencido ({dt.strftime('%d/%m/%Y')}). Atualizar!")
+            except:
+                r[char] = '-'; audit.append(f"❌ {char}: Data inválida ({name})")
+
+        val_pa = get_str(idx_pa)
+        r['DATA_PA'] = format_dt_br(val_pa) if val_pa else "-"
+        audit_date(val_pa, 182, 'B', 'PA 6m')
+
+        val_antropo = get_str(idx_antropo)
+        r['DATA_ANTROPO'] = format_dt_br(val_antropo) if val_antropo else "-" 
+        audit_date(val_antropo, 365, 'C', 'Peso/Alt 12m')
+
+        visitas_str = get_str(idx_visitas)
+        dates = []
+        matches = re.findall(r'\d{2}/\d{2}/\d{2,4}|\d{4}-\d{2}-\d{2}', visitas_str)
+        if matches:
+            for m in matches:
+                try: dates.append(parser.parse(format_dt_br(m), dayfirst=True))
+                except: pass
+        dates.sort(reverse=True)
+        valid_visits = [d for d in dates if 0 <= (base_date - d).days <= 365]
+        
+        r['DATA_ULTIMA_VISITA_ACS'] = valid_visits[0].strftime('%d/%m/%Y') if len(valid_visits) > 0 else "-"
+        r['DATA_PENULTIMA_VISTA_ACS'] = valid_visits[1].strftime('%d/%m/%Y') if len(valid_visits) > 1 else "-"
+        
+        if len(valid_visits) >= 2:
+            has_30d_gap = False
+            best_v1 = valid_visits[0]
+            best_v2 = valid_visits[1]
+            for j in range(len(valid_visits)-1):
+                if abs((valid_visits[j] - valid_visits[j+1]).days) >= 30:
+                    has_30d_gap = True
+                    best_v1 = valid_visits[j]
+                    best_v2 = valid_visits[j+1]
+                    break
+            if has_30d_gap:
+                r['D'] = 'X'; r['DATA_ULTIMA_VISITA_ACS'] = best_v1.strftime('%d/%m/%Y'); r['DATA_PENULTIMA_VISTA_ACS'] = best_v2.strftime('%d/%m/%Y')
+                audit.append(f"✅ D: 2 Visitas ACS OK (+30d: {r['DATA_ULTIMA_VISITA_ACS']} e {r['DATA_PENULTIMA_VISTA_ACS']})")
+            else:
+                r['D'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+                audit.append(f"❌ D: Visitas sem 30d de Gap. Fazer a partir de: {prox.strftime('%d/%m/%Y')}")
+        elif len(valid_visits) == 1:
+            r['D'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+            audit.append(f"❌ D: Apenas 1 Visita ({r['DATA_ULTIMA_VISITA_ACS']}). Agendar 2ª após {prox.strftime('%d/%m/%Y')}")
+        else:
+            r['D'] = '-'; audit.append("❌ D: Nenhuma Visita ACS válida no ano. VISITAR HOJE!")
+
+        val_hemo_aval = get_str(idx_hemo_aval)
+        val_hemo_solic = get_str(idx_hemo_solic)
+        
+        dt_hemo_aval_str = format_dt_br(val_hemo_aval) if val_hemo_aval else "-"
+        dt_hemo_solic_str = format_dt_br(val_hemo_solic) if val_hemo_solic else "-"
+        
+        r['DATA_HEMO'] = dt_hemo_aval_str
+        r['DATA_SOLICITA_HEMO'] = dt_hemo_solic_str
+        
+        hemo_dates = []
+        if dt_hemo_aval_str != "-":
+            try: hemo_dates.append(parser.parse(dt_hemo_aval_str, dayfirst=True))
+            except: pass
+        if dt_hemo_solic_str != "-":
+            try: hemo_dates.append(parser.parse(dt_hemo_solic_str, dayfirst=True))
+            except: pass
+            
+        if hemo_dates:
+            hemo_dates.sort(reverse=True)
+            best_hemo_dt = hemo_dates[0]
+            diff = (base_date - best_hemo_dt).days
+            if 0 <= diff <= 365:
+                r['E'] = 'X'
+                venc = best_hemo_dt + datetime.timedelta(days=365)
+                audit.append(f"✅ E: HbA1c OK ({best_hemo_dt.strftime('%d/%m/%Y')}). Vence: {venc.strftime('%d/%m/%Y')}")
+            else:
+                r['E'] = '-'
+                if diff < 0: audit.append(f"❌ E: Data futura ({best_hemo_dt.strftime('%d/%m/%Y')})")
+                else: audit.append(f"❌ E: HbA1c Vencida ({best_hemo_dt.strftime('%d/%m/%Y')}). Atualizar!")
+        else:
+            r['E'] = '-'; audit.append("❌ E: Pendente HbA1c 12m")
+
+        val_pe = get_str(idx_pe)
+        r['DATA_PE'] = format_dt_br(val_pe) if val_pe else "-"
+        audit_date(val_pe, 365, 'F', 'Pés 12m')
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_c5(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["Cidadao"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Paciente"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Nome"], ["mae", "logradouro", "equipe"])
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+
+    idx_tipo_logradouro = find_idx_flex(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx_flex(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["endereco"], ["eletronico", "email"])
+    
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+
+    idx_mm_med = headers_slug.index(slugify_col("Meses desde o último atendimento médico")) if slugify_col("Meses desde o último atendimento médico") in headers_slug else -1
+    idx_dd_med = headers_slug.index(slugify_col("Dias desde o último atendimento médico")) if slugify_col("Dias desde o último atendimento médico") in headers_slug else -1
+    idx_mm_enf = headers_slug.index(slugify_col("Meses desde o último atendimento de enfermagem")) if slugify_col("Meses desde o último atendimento de enfermagem") in headers_slug else -1
+    idx_dd_enf = headers_slug.index(slugify_col("Dias desde o último atendimento de enfermagem")) if slugify_col("Dias desde o último atendimento de enfermagem") in headers_slug else -1
+    
+    idx_pa = headers_slug.index(slugify_col("Data da última medição de pressão arterial")) if slugify_col("Data da última medição de pressão arterial") in headers_slug else -1
+    idx_antropo = headers_slug.index(slugify_col("Data da ultima medição de peso e altura")) if slugify_col("Data da ultima medição de peso e altura") in headers_slug else -1
+    if idx_antropo == -1: idx_antropo = headers_slug.index(slugify_col("Data da última medição de peso e altura")) if slugify_col("Data da última medição de peso e altura") in headers_slug else -1
+    
+    idx_visitas = headers_slug.index("ultimasvisitasdomiciliares") if "ultimasvisitasdomiciliares" in headers_slug else -1
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.lower() in ["nan", "none"]: idade_val = ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C5', 'INDICADOR_KEY': 'C5', 'DATA_REF': data_ref_fallback, 
+            'EQUIPE': equipe_fallback, 'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 
+            'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val, 'BOLSA_FAMILIA': bolsa_val, 
+            'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_num(idx):
+            if idx == -1: return None
+            val = str(row.iloc[idx]).strip().lower()
+            if val in ["", "nan", "none", "-"]: return None
+            res = re.sub(r'\D', '', val)
+            return int(res) if res else None
+            
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+
+        mm_med = get_num(idx_mm_med)
+        dd_med = get_num(idx_dd_med)
+        mm_enf = get_num(idx_mm_enf)
+        dd_enf = get_num(idx_dd_enf)
+        
+        def calc_int(mm, dd):
+            if mm is None and dd is None: return None
+            m = mm if mm is not None else 0
+            d = dd if dd is not None else 0
+            return (m * 30) + d
+
+        int_med = calc_int(mm_med, dd_med)
+        int_enf = calc_int(mm_enf, dd_enf)
+        
+        intervals = []
+        if int_med is not None: intervals.append(int_med)
+        if int_enf is not None: intervals.append(int_enf)
+            
+        min_int = min(intervals) if intervals else None
+        r['INT_MED'] = str(int_med) if int_med is not None else ""
+        r['INT_ENF'] = str(int_enf) if int_enf is not None else ""
+        
+        audit = []
+        if min_int is not None:
+            if min_int <= 182:
+                r['A'] = 'X'; venc = base_date - datetime.timedelta(days=min_int) + datetime.timedelta(days=182)
+                audit.append(f"✅ A: Cons. OK (Há {min_int} dias). Vence: {venc.strftime('%d/%m/%Y')}")
+            else:
+                r['A'] = '-'; audit.append(f"❌ A: Cons. Vencida (Há {min_int} dias). Agendar Urgente!")
+        else:
+            r['A'] = '-'; audit.append("❌ A: Pendente Consulta")
+
+        def check_date(date_str, max_days, char, name):
+            if not date_str or date_str == "-":
+                r[char] = '-'; audit.append(f"❌ {char}: Pendente {name}")
+                return ""
+            try:
+                dt_str = format_dt_br(date_str)
+                dt = parser.parse(dt_str, dayfirst=True)
+                diff = (base_date - dt).days
+                if 0 <= diff <= max_days:
+                    r[char] = 'X'; venc = dt + datetime.timedelta(days=max_days)
+                    audit.append(f"✅ {char}: {name} OK ({dt.strftime('%d/%m/%Y')}). Vence: {venc.strftime('%d/%m/%Y')}")
+                else:
+                    r[char] = '-'
+                    if diff < 0: audit.append(f"❌ {char}: Data futura ({dt.strftime('%d/%m/%Y')})")
+                    else: audit.append(f"❌ {char}: {name} Vencido ({dt.strftime('%d/%m/%Y')}). Atualizar!")
+                return dt.strftime('%d/%m/%Y')
+            except:
+                r[char] = '-'; audit.append(f"❌ {char}: Data inválida ({name})")
+                return ""
+
+        r['DATA_PA'] = check_date(get_str(idx_pa), 182, 'B', 'PA 6m')
+        r['DATA_ANTROPO'] = check_date(get_str(idx_antropo), 365, 'C', 'Peso/Alt 12m')
+
+        visitas_str = get_str(idx_visitas)
+        dates = []
+        matches = re.findall(r'\d{2}/\d{2}/\d{2,4}|\d{4}-\d{2}-\d{2}', visitas_str)
+        if matches:
+            for m in matches:
+                try: dates.append(parser.parse(format_dt_br(m), dayfirst=True))
+                except: pass
+        dates.sort(reverse=True)
+        valid_visits = [d for d in dates if 0 <= (base_date - d).days <= 365]
+        
+        r['DATA_ULTIMA_VISITA_ACS'] = valid_visits[0].strftime('%d/%m/%Y') if len(valid_visits) > 0 else "-"
+        r['DATA_PENULTIMA_VISTA_ACS'] = valid_visits[1].strftime('%d/%m/%Y') if len(valid_visits) > 1 else "-"
+            
+        if len(valid_visits) >= 2:
+            has_30d_gap = False
+            best_v1 = valid_visits[0]
+            best_v2 = valid_visits[1]
+            for j in range(len(valid_visits)-1):
+                if abs((valid_visits[j] - valid_visits[j+1]).days) >= 30:
+                    has_30d_gap = True
+                    best_v1 = valid_visits[j]
+                    best_v2 = valid_visits[j+1]
+                    break
+            if has_30d_gap:
+                r['D'] = 'X'; r['DATA_ULTIMA_VISITA_ACS'] = best_v1.strftime('%d/%m/%Y'); r['DATA_PENULTIMA_VISTA_ACS'] = best_v2.strftime('%d/%m/%Y')
+                audit.append(f"✅ D: 2 Visitas ACS OK (+30d: {r['DATA_ULTIMA_VISITA_ACS']} e {r['DATA_PENULTIMA_VISTA_ACS']})")
+            else:
+                r['D'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+                audit.append(f"❌ D: Visitas sem 30d de Gap. Fazer a partir de: {prox.strftime('%d/%m/%Y')}")
+        elif len(valid_visits) == 1:
+            r['D'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+            audit.append(f"❌ D: Apenas 1 Visita ({r['DATA_ULTIMA_VISITA_ACS']}). Agendar 2ª após {prox.strftime('%d/%m/%Y')}")
+        else:
+            r['D'] = '-'; audit.append("❌ D: Nenhuma Visita ACS válida no ano. VISITAR HOJE!")
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_c6(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["Cidadao"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Paciente"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Nome"], ["mae", "logradouro", "equipe"])
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+
+    idx_tipo_logradouro = find_idx_flex(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx_flex(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["endereco"], ["eletronico", "email"])
+    
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+
+    idx_mm_med = find_idx_flex(["meses", "medico"]) if find_idx_flex(["meses", "medico"]) != -1 else headers_slug.index(slugify_col("Meses desde o último atendimento médico")) if slugify_col("Meses desde o último atendimento médico") in headers_slug else -1
+    idx_dd_med = find_idx_flex(["dias", "medico"]) if find_idx_flex(["dias", "medico"]) != -1 else headers_slug.index(slugify_col("Dias desde o último atendimento médico")) if slugify_col("Dias desde o último atendimento médico") in headers_slug else -1
+    idx_mm_enf = find_idx_flex(["meses", "enfermagem"]) if find_idx_flex(["meses", "enfermagem"]) != -1 else headers_slug.index(slugify_col("Meses desde o último atendimento de enfermagem")) if slugify_col("Meses desde o último atendimento de enfermagem") in headers_slug else -1
+    idx_dd_enf = find_idx_flex(["dias", "enfermagem"]) if find_idx_flex(["dias", "enfermagem"]) != -1 else headers_slug.index(slugify_col("Dias desde o último atendimento de enfermagem")) if slugify_col("Dias desde o último atendimento de enfermagem") in headers_slug else -1
+    
+    idx_antropo = headers_slug.index(slugify_col("Data da ultima medição de peso e altura")) if slugify_col("Data da ultima medição de peso e altura") in headers_slug else -1
+    if idx_antropo == -1: idx_antropo = headers_slug.index(slugify_col("Data da última medição de peso e altura")) if slugify_col("Data da última medição de peso e altura") in headers_slug else -1
+    
+    idx_visitas = headers_slug.index("ultimasvisitasdomiciliares") if "ultimasvisitasdomiciliares" in headers_slug else -1
+    idx_vac = headers_slug.index("influenzaultimos12meses") if "influenzaultimos12meses" in headers_slug else find_idx_flex(["influenza"])
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.lower() in ["nan", "none"]: idade_val = ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C6', 'INDICADOR_KEY': 'C6', 'DATA_REF': data_ref_fallback, 
+            'EQUIPE': equipe_fallback, 'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 
+            'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val, 'BOLSA_FAMILIA': bolsa_val, 
+            'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_num(idx):
+            if idx == -1: return None
+            val = str(row.iloc[idx]).strip().lower()
+            if val in ["", "nan", "none", "-"]: return None
+            res = re.sub(r'\D', '', val)
+            return int(res) if res else None
+            
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+
+        mm_med = get_num(idx_mm_med)
+        dd_med = get_num(idx_dd_med)
+        mm_enf = get_num(idx_mm_enf)
+        dd_enf = get_num(idx_dd_enf)
+        
+        def calc_int(mm, dd):
+            if mm is None and dd is None: return None
+            m = mm if mm is not None else 0
+            d = dd if dd is not None else 0
+            return (m * 30) + d
+
+        int_med = calc_int(mm_med, dd_med)
+        int_enf = calc_int(mm_enf, dd_enf)
+        
+        intervals = []
+        if int_med is not None: intervals.append(int_med)
+        if int_enf is not None: intervals.append(int_enf)
+            
+        min_int = min(intervals) if intervals else None
+        r['INT_MED'] = str(int_med) if int_med is not None else ""
+        r['INT_ENF'] = str(int_enf) if int_enf is not None else ""
+        
+        audit = []
+        if min_int is not None:
+            if min_int <= 365:
+                r['A'] = 'X'; venc = base_date - datetime.timedelta(days=min_int) + datetime.timedelta(days=365)
+                audit.append(f"✅ A: Cons. OK (Há {min_int} dias). Vence: {venc.strftime('%d/%m/%Y')}")
+            else:
+                r['A'] = '-'; audit.append(f"❌ A: Cons. Vencida (Há {min_int} dias). Agendar Urgente!")
+        else:
+            r['A'] = '-'; audit.append("❌ A: Pendente Consulta")
+
+        dt_antropo_str = get_str(idx_antropo)
+        if not dt_antropo_str or dt_antropo_str == "-":
+            r['B'] = '-'; audit.append("❌ B: Pendente Peso/Alt 12m")
+        else:
+            try:
+                dt_a = parser.parse(format_dt_br(dt_antropo_str), dayfirst=True)
+                diff_a = (base_date - dt_a).days
+                if 0 <= diff_a <= 365:
+                    r['B'] = 'X'; venc = dt_a + datetime.timedelta(days=365)
+                    audit.append(f"✅ B: Peso/Alt OK ({dt_a.strftime('%d/%m/%Y')}). Vence: {venc.strftime('%d/%m/%Y')}"); r['DATA_ANTROPO'] = dt_a.strftime('%d/%m/%Y')
+                else:
+                    r['B'] = '-'
+                    if diff_a < 0: audit.append(f"❌ B: Data futura ({dt_a.strftime('%d/%m/%Y')})")
+                    else: audit.append(f"❌ B: Peso/Alt Vencido ({dt_a.strftime('%d/%m/%Y')}). Agendar!")
+                    r['DATA_ANTROPO'] = dt_a.strftime('%d/%m/%Y')
+            except:
+                r['B'] = '-'; audit.append("❌ B: Data inválida (Peso/Alt)")
+
+        visitas_str = get_str(idx_visitas)
+        dates = []
+        matches = re.findall(r'\d{2}/\d{2}/\d{2,4}|\d{4}-\d{2}-\d{2}', visitas_str)
+        if matches:
+            for m in matches:
+                try: dates.append(parser.parse(format_dt_br(m), dayfirst=True))
+                except: pass
+        dates.sort(reverse=True)
+        valid_visits = [d for d in dates if 0 <= (base_date - d).days <= 365]
+        
+        r['DATA_ULTIMA_VISITA_ACS'] = valid_visits[0].strftime('%d/%m/%Y') if len(valid_visits) > 0 else "-"
+        r['DATA_PENULTIMA_VISTA_ACS'] = valid_visits[1].strftime('%d/%m/%Y') if len(valid_visits) > 1 else "-"
+            
+        if len(valid_visits) >= 2:
+            has_30d_gap = False
+            best_v1 = valid_visits[0]
+            best_v2 = valid_visits[1]
+            for j in range(len(valid_visits)-1):
+                if abs((valid_visits[j] - valid_visits[j+1]).days) >= 30:
+                    has_30d_gap = True
+                    best_v1 = valid_visits[j]
+                    best_v2 = valid_visits[j+1]
+                    break
+            if has_30d_gap:
+                r['C'] = 'X'; r['DATA_ULTIMA_VISITA_ACS'] = best_v1.strftime('%d/%m/%Y'); r['DATA_PENULTIMA_VISTA_ACS'] = best_v2.strftime('%d/%m/%Y')
+                audit.append(f"✅ C: 2 Visitas ACS OK (+30d: {r['DATA_ULTIMA_VISITA_ACS']} e {r['DATA_PENULTIMA_VISTA_ACS']})")
+            else:
+                r['C'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+                audit.append(f"❌ C: Visitas sem 30d de Gap. Fazer a partir de: {prox.strftime('%d/%m/%Y')}")
+        elif len(valid_visits) == 1:
+            r['C'] = '-'; prox = valid_visits[0] + datetime.timedelta(days=30)
+            audit.append(f"❌ C: Apenas 1 Visita ({r['DATA_ULTIMA_VISITA_ACS']}). Agendar 2ª após {prox.strftime('%d/%m/%Y')}")
+        else:
+            r['C'] = '-'; audit.append("❌ C: Nenhuma Visita ACS válida no ano. VISITAR HOJE!")
+
+        vac_val = get_str(idx_vac)
+        vac_matches = re.findall(r'\d{2}/\d{2}/\d{4}', vac_val)
+        vac_dates = []
+        for m in vac_matches:
+            try: vac_dates.append(parser.parse(format_dt_br(m), dayfirst=True))
+            except: pass
+        vac_dates.sort(reverse=True)
+        
+        if len(vac_dates) > 0:
+            dt_vac = vac_dates[0]
+            diff_v = (base_date - dt_vac).days
+            r['DATA_INFLU'] = dt_vac.strftime('%d/%m/%Y')
+            
+            if 0 <= diff_v <= 365:
+                r['D'] = 'X'; venc_v = dt_vac + datetime.timedelta(days=365)
+                audit.append(f"✅ D: Vacina Influenza OK ({dt_vac.strftime('%d/%m/%Y')}). Vence: {venc_v.strftime('%d/%m/%Y')}")
+            else:
+                r['D'] = '-'; audit.append(f"❌ D: Vacina Influenza Vencida ({dt_vac.strftime('%d/%m/%Y')}). Aplicar!")
+        else:
+            r['D'] = '-'
+            if vac_val and vac_val.upper() not in ["NAN", "NONE", "-", "NÃO", "NAO", "0", "FALSO"]:
+                r['D'] = 'X'; audit.append("✅ D: Vacina Influenza OK (Texto Encontrado)"); r['DATA_INFLU'] = vac_val
+            else:
+                audit.append("❌ D: Pendente Vacina Influenza")
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_c7(df, equipe_fallback, data_ref_fallback):
+    global raw_db
+    
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    try:
+        if pd.notna(df.iloc[22, 1]) and str(df.iloc[22, 1]).strip() != "":
+            data_ref_fallback = format_dt_br(str(df.iloc[22, 1]))
+        if pd.notna(df.iloc[9, 1]) and str(df.iloc[9, 1]).strip() != "":
+            equipe_fallback = clean_equipe(str(df.iloc[9, 1]))
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+    
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx_flex(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx_flex(["Cidadao"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Paciente"])
+    if idx_nm == -1: idx_nm = find_idx_flex(["Nome"], ["mae", "logradouro", "equipe"])
+    idx_cpf = find_idx_flex(["CPF"])
+    idx_cns = find_idx_flex(["CNS"])
+    idx_nasc = find_idx_flex(["nascimento"])
+    idx_idade = find_idx_flex(["Idade"], ["primeira"])
+    idx_sexo = find_idx_flex(["Sexo"])
+    idx_bolsa = find_idx_flex(["Bolsa Familia"])
+    idx_ma = find_idx_flex(["Microarea"])
+
+    idx_rua = find_idx_flex(["rua"])
+    if idx_rua == -1: idx_rua = find_idx_flex(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    idx_num_end = find_idx_flex(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx_flex(["complemento"])
+
+    idx_colo_solic1 = find_idx_flex(["examederastreamentodecancerdecolodeuteroultimasolicitacao"])
+    idx_colo_solic2 = find_idx_flex(["examederastreamentodecancerdecolodeuterodataultimasolicitacao"])
+    idx_colo_solic = idx_colo_solic2 if idx_colo_solic2 != -1 else idx_colo_solic1
+    idx_colo_aval = find_idx_flex(["examederastreamentodecancerdecolodeuteroultimaavaliacao"])
+    
+    hpv_cols = []
+    for idx, slug_h in enumerate(headers_slug):
+        if "hpv" in slug_h or "papiloma" in slug_h:
+            hpv_cols.append(idx)
+    
+    idx_sexual = find_idx_flex(["datadaultimaconsultadesaudesexualereprodutiva"])
+    
+    idx_mama_solic = find_idx_flex(["examederastreamentodecancerdemamadataoltimasolicitacao"])
+    if idx_mama_solic == -1: idx_mama_solic = find_idx_flex(["examederastreamentodecancerdemamadataultimasolicitacao"])
+    
+    idx_mama_real = find_idx_flex(["examederastreamentodecancerdemamadataoltimarealizacao"])
+    if idx_mama_real == -1: idx_mama_real = find_idx_flex(["examederastreamentodecancerdemamadataultimarealizacao"])
+    
+    idx_mama_aval = find_idx_flex(["examederastreamentodecancerdemamadataoltimaavaliacao"])
+    if idx_mama_aval == -1: idx_mama_aval = find_idx_flex(["examederastreamentodecancerdemamadataultimaavaliacao"])
+
+    base_date = datetime.datetime.now()
+    if data_ref_fallback != "-":
+        try: base_date = parser.parse(data_ref_fallback, dayfirst=True)
+        except: pass
+
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        if not nm: continue
+            
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+        
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        
+        idade_num = -1
+        if idade_val:
+            m_anos = re.search(r'(\d+)\s*ano', idade_val.lower())
+            if m_anos:
+                idade_num = int(m_anos.group(1))
+            else:
+                if re.search(r'(\d+)\s*m[êe]s', idade_val.lower()) or re.search(r'(\d+)\s*dia', idade_val.lower()):
+                    idade_num = 0
+        
+        if idade_num == -1 and nasc_val != "-":
+            try:
+                dt_nasc = parser.parse(nasc_val, dayfirst=True)
+                idade_num = base_date.year - dt_nasc.year - ((base_date.month, base_date.day) < (dt_nasc.month, dt_nasc.day))
+            except:
+                pass
+                    
+        if idade_num == -1:
+            idade_num = 0
+
+        sexo_val = str(row.iloc[idx_sexo]).strip().upper() if idx_sexo != -1 and pd.notna(row.iloc[idx_sexo]) else ""
+        
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        if bolsa_val.lower() in ["nan", "none"]: bolsa_val = ""
+        
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        rua_val = str(row.iloc[idx_rua]).strip() if idx_rua != -1 and pd.notna(row.iloc[idx_rua]) else ""
+        num_val = str(row.iloc[idx_num_end]).strip() if idx_num_end != -1 and pd.notna(row.iloc[idx_num_end]) else ""
+        compl_val = str(row.iloc[idx_compl_end]).strip() if idx_compl_end != -1 and pd.notna(row.iloc[idx_compl_end]) else ""
+        
+        rua_val = rua_val if rua_val.lower() not in ["nan", "none", "-"] else ""
+        num_val = num_val if num_val.lower() not in ["nan", "none", "-"] else ""
+        compl_val = compl_val if compl_val.lower() not in ["nan", "none", "-"] else ""
+        
+        end_str = f"{rua_val}, {num_val} {compl_val}".strip(", ")
+        end_completo = end_str if end_str and end_str != "," else "-"
+        
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': 'C7', 'INDICADOR_KEY': 'C7', 'DATA_REF': data_ref_fallback, 
+            'EQUIPE': equipe_fallback, 'MICROAREA': ma_val, 'NOME': nm, 'CPF': doc or "N/I", 
+            'DATA_NASCIMENTO': nasc_val, 'IDADE': str(idade_num), 'BOLSA_FAMILIA': bolsa_val, 
+            'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        def get_str(idx):
+            if idx == -1: return ""
+            val = str(row.iloc[idx]).strip()
+            return "" if val.lower() in ["nan", "none"] else val
+            
+        def is_recent(dt_str, max_days):
+            if not dt_str or dt_str == "-": return False, None
+            try:
+                dt = parser.parse(format_dt_br(dt_str), dayfirst=True)
+                diff = (base_date - dt).days
+                if 0 <= diff <= max_days: return True, dt
+                return False, dt
+            except: return False, None
+
+        audit = []
+
+        # INDICADOR A: Prevenção Colo (25 a 64 anos) -> 36 meses (aprox 1095 dias)
+        v_colo_solic = get_str(idx_colo_solic)
+        v_colo_aval = get_str(idx_colo_aval)
+        r['EXAME_CANCER_COLO'] = format_dt_br(v_colo_solic) if v_colo_solic else "-"
+        r['EXAME_CANCER_COLO_AVAL'] = format_dt_br(v_colo_aval) if v_colo_aval else "-"
+        r['DATA_EXAME_COLO'] = r['EXAME_CANCER_COLO'] 
+        
+        if 25 <= idade_num <= 64:
+            ok_solic, dt_solic = is_recent(v_colo_solic, 1095)
+            ok_aval, dt_aval = is_recent(v_colo_aval, 1095)
+            
+            dt_last_colo = None
+            if dt_solic and dt_aval: dt_last_colo = max(dt_solic, dt_aval)
+            elif dt_solic: dt_last_colo = dt_solic
+            elif dt_aval: dt_last_colo = dt_aval
+
+            if ok_solic or ok_aval:
+                r['A'] = 'X'
+                dt_ok = dt_solic if (ok_solic and dt_solic) else dt_aval
+                if dt_ok:
+                    venc = dt_ok + datetime.timedelta(days=1095)
+                    audit.append(f"✅ A: Preventivo Colo Válido até {venc.strftime('%d/%m/%Y')} (Coletado/Solicitado/Avaliado em: {dt_ok.strftime('%d/%m/%Y')})")
+                else:
+                    audit.append("✅ A: Preventivo Colo OK (Validade 36m)")
+            else:
+                r['A'] = '-'
+                if dt_last_colo:
+                    audit.append(f"❌ A: Preventivo Colo VENCIDO (Último reg: {dt_last_colo.strftime('%d/%m/%Y')}). ACS deve buscar a mulher, entender o motivo de não ter refeito o exame (ex: recusa, sem vaga) e orientar. É válido no indicador se coletar, examinar ou solicitar o exame!")
+                else:
+                    audit.append("❌ A: Preventivo Colo INEXISTENTE. ACS deve investigar o motivo da mulher nunca ter realizado/registrado. Buscar com precisão e orientar. Basta coletar, examinar ou solicitar para pontuar!")
+        else:
+            r['A'] = 'N/A'; audit.append(f"➖ A: Fora da faixa Preventivo ({idade_num}a não é 25-64a)")
+
+        # INDICADOR B: Vacina HPV
+        v_hpv = ""
+        for idx_h in hpv_cols:
+            val_h = get_str(idx_h)
+            if val_h and val_h.upper() not in ["", "NAN", "NONE", "-", "NÃO", "NAO", "0", "FALSO", "NÃO AVALIADO", "NAO AVALIADO", "NÃO REALIZADO"]:
+                v_hpv = val_h
+                break
+                
+        r['VACINA_HPV'] = v_hpv
+        
+        if 9 <= idade_num <= 14:
+            if idx_sexo != -1 and sexo_val not in ["FEMININO", "F", "MULHER"]:
+                r['B'] = 'N/A'; audit.append("➖ B: Fora do alvo HPV (Homem)")
+            else:
+                if v_hpv:
+                    r['B'] = 'X'; audit.append(f"✅ B: Vacina HPV OK ({v_hpv})")
+                else:
+                    r['B'] = '-'; audit.append("❌ B: Vacina HPV Pendente")
+        else:
+            r['B'] = 'N/A'; audit.append(f"➖ B: Fora do alvo HPV ({idade_num}a não é 9-14a)")
+
+        # INDICADOR C: Saúde Sexual e Reprodutiva (14 a 69 anos) -> 12 meses (365 dias)
+        v_sexual = get_str(idx_sexual)
+        r['DATA_ATEND_SEXUAL'] = format_dt_br(v_sexual) if v_sexual else "-"
+        if 14 <= idade_num <= 69:
+            ok_sex, dt_sex = is_recent(v_sexual, 365)
+            if ok_sex:
+                r['C'] = 'X'
+                venc = dt_sex + datetime.timedelta(days=365)
+                audit.append(f"✅ C: Atend. Saúde Sexual OK ({dt_sex.strftime('%d/%m/%Y')}). Vence: {venc.strftime('%d/%m/%Y')}")
+            else:
+                r['C'] = '-'; audit.append("❌ C: Saúde Sexual Pendente/Vencido (Prazo 12m)")
+        else:
+            r['C'] = 'N/A'; audit.append(f"➖ C: Fora da faixa Saúde Sexual ({idade_num}a não é 14-69a)")
+
+        # INDICADOR D: Mamografia (50 a 69 anos) -> 24 meses (730 dias)
+        v_mama_solic = get_str(idx_mama_solic)
+        v_mama_real = get_str(idx_mama_real)
+        v_mama_aval = get_str(idx_mama_aval)
+        r['EXAME_CANCER_MAMA_SOLIC'] = format_dt_br(v_mama_solic) if v_mama_solic else "-"
+        r['EXAME_CANCER_MAMA_REAL'] = format_dt_br(v_mama_real) if v_mama_real else "-"
+        r['EXAME_CANCER_MAMA_AVAL'] = format_dt_br(v_mama_aval) if v_mama_aval else "-"
+        
+        if 50 <= idade_num <= 69:
+            ok_m_solic, dt_m_solic = is_recent(v_mama_solic, 730)
+            ok_m_real, dt_m_real = is_recent(v_mama_real, 730)
+            ok_m_aval, dt_m_aval = is_recent(v_mama_aval, 730)
+            
+            all_m_dates = [d for d in [dt_m_solic, dt_m_real, dt_m_aval] if d]
+            dt_last_m = max(all_m_dates) if all_m_dates else None
+
+            if ok_m_solic or ok_m_real or ok_m_aval:
+                r['D'] = 'X'
+                if dt_last_m:
+                    venc = dt_last_m + datetime.timedelta(days=730)
+                    audit.append(f"✅ D: Mamografia Válida até {venc.strftime('%d/%m/%Y')} (Registrada em: {dt_last_m.strftime('%d/%m/%Y')})")
+                else:
+                    audit.append("✅ D: Mamografia OK (no prazo de 24m)")
+            else:
+                r['D'] = '-'
+                if dt_last_m:
+                    audit.append(f"❌ D: Mamografia VENCIDA (Último reg: {dt_last_m.strftime('%d/%m/%Y')}). ACS deve apurar com precisão por que a paciente não repetiu o exame. Lembrando que solicitar, examinar ou registrar a coleta já contabiliza no indicador!")
+                else:
+                    audit.append("❌ D: Mamografia INEXISTENTE. ACS deve investigar o motivo (recusa, dificuldade de acesso, etc) e orientar. É necessário solicitar, realizar ou avaliar para cumprir o indicador.")
+        else:
+            r['D'] = 'N/A'; audit.append(f"➖ D: Fora da faixa Mamografia ({idade_num}a não é 50-69a)")
+
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_pec_generic(df, ind_key, equipe, data_ref):
+    global raw_db
+    
+    unidade_val = ""
+    try:
+        if len(df) > 4 and len(df.columns) > 0:
+            uv = str(df.iloc[4, 0]).strip()
+            if uv.lower() not in ["nan", "none", ""]:
+                unidade_val = uv.split(":", 1)[-1].strip() if ":" in uv else uv
+    except: pass
+
+    h_idx = find_dynamic_header(df)
+    if h_idx == -1: return 0
+        
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    def find_idx(req, exc=None):
+        if exc is None: exc = []
+        r_slugs = [slugify_col(f) for f in req]
+        e_slugs = [slugify_col(f) for f in exc]
+        for idx, slug_h in enumerate(headers_slug):
+            if all(r in slug_h for r in r_slugs):
+                if not any(e in slug_h for e in e_slugs):
+                    return idx
+        return -1
+
+    idx_nm = find_idx(["Gestante"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx(["Cidadao"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx(["Paciente"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx(["Nome"], ["mae", "logradouro", "equipe"])
+    if idx_nm == -1: idx_nm = find_idx(["Mulher"], ["mae"])
+    if idx_nm == -1: idx_nm = find_idx(["Pessoa"], ["mae"])
+    
+    idx_cpf = find_idx(["CPF"])
+    idx_cns = find_idx(["CNS"])
+    if idx_cns == -1: idx_cns = find_idx(["Cartao Nacional"])
+    if idx_cns == -1: idx_cns = find_idx(["Cartao SUS"])
+    
+    idx_ma = find_idx(["Microarea"])
+    if idx_ma == -1: idx_ma = find_idx(["MA"])
+    
+    idx_bolsa = find_idx(["Bolsa Familia"])
+    if idx_bolsa == -1: idx_bolsa = find_idx(["Beneficiario"])
+    
+    idx_nasc = find_idx(["nascimento"])
+    idx_idade = find_idx(["Idade"], ["primeira"])
+
+    idx_tipo_logradouro = find_idx(["tipo", "logradouro"])
+    idx_nome_logradouro = find_idx(["nome", "logradouro"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx(["logradouro"], ["tipo", "bairro", "cep", "municipio"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx_flex(["rua"], ["situacao", "morador", "condicao"])
+    if idx_nome_logradouro == -1: idx_nome_logradouro = find_idx(["endereco"], ["eletronico", "email"])
+    
+    idx_num_end = find_idx(["numero"], ["telefone", "cartao", "cns", "documento", "familia", "prontuario", "microarea", "celular", "nis"])
+    idx_compl_end = find_idx(["complemento"])
+            
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        if pd.isna(row).all() or "FONTE:" in str(row.iloc[0]).upper(): break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 and pd.notna(row.iloc[idx_nm]) else ""
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+            
+        if not (nm and len(nm) >= 3) and not doc: continue
+            
+        idade_val = str(row.iloc[idx_idade]).strip() if idx_idade != -1 and pd.notna(row.iloc[idx_idade]) else ""
+        if idade_val.endswith(".0"): idade_val = idade_val[:-2]
+            
+        bolsa_val = str(row.iloc[idx_bolsa]).strip() if idx_bolsa != -1 and pd.notna(row.iloc[idx_bolsa]) else ""
+        ma_val = str(row.iloc[idx_ma]).strip() if idx_ma != -1 and pd.notna(row.iloc[idx_ma]) else "-"
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+        
+        end_completo = build_address(row, idx_tipo_logradouro, idx_nome_logradouro, idx_num_end, idx_compl_end)
+            
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'UNIDADE': unidade_val,
+            'FONTE': 'PEC', 'INDICADOR': ind_key, 'INDICADOR_KEY': ind_key, 'DATA_REF': data_ref, 
+            'EQUIPE': clean_equipe(equipe), 'MICROAREA': ma_val, 'NOME': nm or "ID POR DOC", 
+            'CPF': doc or "N/I", 'DATA_NASCIMENTO': nasc_val, 'IDADE': idade_val, 
+            'BOLSA_FAMILIA': bolsa_val, 'ENDERECO': end_completo
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        audit = []
+        for char in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+            idx_char = find_idx([char])
+            if idx_char != -1:
+                val = str(row.iloc[idx_char]).strip()
+                val_up = val.upper()
+                if val_up in ["", "NAN", "NONE", "-", "NÃO", "NAO", "FALSO", "0"]:
+                    r[char] = '-'; audit.append(f"❌ {char}: Pendente (Agendar p/ Atualizar)")
+                else:
+                    r[char] = 'X'
+                    match_data = re.search(r'\d{2}/\d{2}/\d{4}', val)
+                    if match_data: audit.append(f"✅ {char}: Realizado em {match_data.group()}")
+                    else: audit.append(f"✅ {char}: Realizado")
+                        
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def engine_capture_siaps(df, ind_key):
+    global raw_db
+    dt_ref = "-"
+    eq_cabecalho = "N/I"
+    
+    # 1. Buscar cabeçalhos (Competência Selecionada e Equipe Selecionada)
+    for i in range(min(65, len(df))):
+        for c in range(min(5, len(df.columns))):
+            v = str(df.iloc[i, c])
+            v_up = remove_accents(v).upper()
+            
+            if "COMPETENCIA SELECIONADA" in v_up:
+                if ":" in v:
+                    val = v.split(":")[-1].replace(",","").strip()
+                    if val: dt_ref = format_dt_br(val)
+                if (dt_ref == "-" or dt_ref == "") and c + 1 < len(df.columns):
+                    dt_ref = format_dt_br(str(df.iloc[i, c+1]).replace(",","").strip())
+            
+            if "EQUIPE SELECIONADA" in v_up:
+                if ":" in v:
+                    val = v.split(":")[-1].strip()
+                    if val: eq_cabecalho = clean_equipe(val)
+                if (eq_cabecalho == "N/I" or eq_cabecalho == "") and c + 1 < len(df.columns):
+                    eq_cabecalho = clean_equipe(str(df.iloc[i, c+1]).strip())
+
+    h_idx = -1
+    for i in range(5, min(105, len(df))):
+        row = [str(x).lower() for x in df.iloc[i]]
+        if "nascimento" in row and ("cpf" in row or "cns" in row or "cartaonacionaldesaude" in row or "cartaosus" in row):
+            h_idx = i
+            break
+            
+    if h_idx == -1: return 0
+        
+    headers_slug = [slugify_col(x) for x in df.iloc[h_idx]]
+    
+    idx_nm = headers_slug.index('nome') if 'nome' in headers_slug else headers_slug.index('paciente') if 'paciente' in headers_slug else -1
+    
+    idx_cpf = headers_slug.index('cpf') if 'cpf' in headers_slug else -1
+    idx_cns = headers_slug.index('cns') if 'cns' in headers_slug else headers_slug.index('cartaonacionaldesaude') if 'cartaonacionaldesaude' in headers_slug else headers_slug.index('cartaosus') if 'cartaosus' in headers_slug else -1
+
+    idx_ma = headers_slug.index('ma') if 'ma' in headers_slug else headers_slug.index('microarea') if 'microarea' in headers_slug else -1
+    idx_ine = headers_slug.index('ine') if 'ine' in headers_slug else -1
+    
+    idx_nasc = -1
+    for j, h in enumerate(headers_slug):
+        if "nascimento" in h:
+            idx_nasc = j
+            break
+            
+    count = 0
+    for i in range(h_idx + 1, len(df)):
+        row = df.iloc[i]
+        
+        if pd.isna(row).all(): continue
+        
+        val_col0 = str(row.iloc[0]).strip().upper()
+        if "FONTE:" in val_col0 or "DICIONÁRIO" in val_col0 or "DICIONARIO" in val_col0 or "TOTAL" in val_col0: 
+            break
+            
+        nm = str(row.iloc[idx_nm]).strip() if idx_nm != -1 else ""
+        if nm.lower() in ["nan", "none"]: nm = ""
+        
+        doc = clean_id(row.iloc[idx_cpf]) if idx_cpf != -1 and pd.notna(row.iloc[idx_cpf]) else None
+        if not doc: 
+            doc = clean_id(row.iloc[idx_cns]) if idx_cns != -1 and pd.notna(row.iloc[idx_cns]) else None
+            
+        if not doc:
+            doc = f"SEM_DOC_{i}"
+            
+        if not (nm and len(nm) >= 3) and doc.startswith("SEM_DOC"): 
+            continue
+            
+        ma_val = str(row.iloc[idx_ma]) if idx_ma != -1 else "-"
+        if ma_val.lower() in ["nan", "none"]: ma_val = "-"
+        
+        eq_val = eq_cabecalho if eq_cabecalho != "N/I" else (clean_equipe(str(row.iloc[idx_ine])) if idx_ine != -1 else "N/I")
+        nasc_val = format_dt_br(row.iloc[idx_nasc]) if idx_nasc != -1 else "-"
+            
+        r = {col: "" for col in COLUNAS_PADRAO}
+        r.update({
+            'FONTE': 'SIAPS', 'INDICADOR': ind_key, 'INDICADOR_KEY': ind_key, 'DATA_REF': dt_ref, 
+            'NOME': nm or "ID POR DOC", 'CPF': doc if not doc.startswith("SEM_DOC") else "N/I", 'MICROAREA': ma_val, 
+            'EQUIPE': eq_val, 'DATA_NASCIMENTO': nasc_val
+        })
+        r['ORIGINAL_INDEX'] = len(raw_db)
+        
+        audit = []
+        
+        if ind_key == "C7":
+            for char in ['A', 'B', 'C', 'D']:
+                target_nm = f"nm{char.lower()}"
+                target_dn = f"dn{char.lower()}"
+                
+                nm_idx = headers_slug.index(target_nm) if target_nm in headers_slug else -1
+                dn_idx = headers_slug.index(target_dn) if target_dn in headers_slug else -1
+                
+                if dn_idx != -1 and nm_idx != -1:
+                    dn_val = str(row.iloc[dn_idx]).strip().upper()
+                    nm_val = str(row.iloc[nm_idx]).strip().upper()
+                    
+                    is_in_dn = "X" in dn_val or "SIM" in dn_val or dn_val == "1" or dn_val == "S"
+                    is_in_nm = "X" in nm_val or "SIM" in nm_val or nm_val == "1" or nm_val == "S" or "OK" in nm_val
+                    
+                    if is_in_dn:
+                        if is_in_nm:
+                            r[char] = 'X'; audit.append(f"✅ {char}: Realizado")
+                        else:
+                            r[char] = '-'; audit.append(f"❌ {char}: Pendente")
+                    else:
+                        r[char] = 'N/A'; audit.append(f"➖ {char}: Fora do Alvo")
+                else:
+                    if nm_idx != -1:
+                        nm_val = str(row.iloc[nm_idx]).strip().upper()
+                        if "X" in nm_val or "SIM" in nm_val or nm_val == "1" or nm_val == "S" or "OK" in nm_val:
+                            r[char] = 'X'; audit.append(f"✅ {char}: Realizado")
+                        else:
+                            r[char] = '-'; audit.append(f"❌ {char}: Pendente")
+                    else:
+                        r[char] = 'N/A'; audit.append(f"➖ {char}: Sem Dados")
+        else:
+            for char in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                slug_c = char.lower()
+                if slug_c in headers_slug:
+                    val = str(row.iloc[headers_slug.index(slug_c)]).strip().upper()
+                    if "X" in val or "SIM" in val or val == "1" or val == "S" or "OK" in val:
+                        r[char] = 'X'; audit.append(f"✅ {char}")
+                    else:
+                        r[char] = '-'; audit.append(f"❌ {char}")
+        
+        r['AUDIT'] = " | ".join(audit)
+        raw_db.append(r)
+        count += 1
+        
+    return count
+
+def update_filter_lists():
+    teams = sorted(list(set(str(r['EQUIPE']) for r in raw_db if r['EQUIPE'])))
+    html_options = '<option value="ALL">TODAS</option>'
+    for t in teams: html_options += f'<option value="{t}">EQ {t}</option>'
+    document.getElementById("team-filter").innerHTML = html_options
+    
+    mas = sorted(list(set(str(r['MICROAREA']).replace(".0","") for r in raw_db if r['MICROAREA'] and r['MICROAREA'] != '-')))
+    window.renderMABUTTONS(to_js(mas))
+
+def applyStatFilter(f):
+    global active_filter_stat
+    active_filter_stat = f
+    document.getElementById("active-filter-alert").classList.remove("hidden")
+    document.getElementById("filter-text").innerText = f
+    refresh_data_view()
+
+def clearFilter():
+    global active_filter_stat
+    active_filter_stat = None
+    document.getElementById("active-filter-alert").classList.add("hidden")
+    refresh_data_view()
+
+def refresh_data_view():
+    global current_view_data
+    src = document.getElementById("source-filter").value
+    ind = document.getElementById("indicator-filter").value
+    team = document.getElementById("team-filter").value
+    
+    selected_mas = list(window.selectedMAs)
+    if not selected_mas: selected_mas = ["ALL"]
+    
+    view = [r for r in raw_db if r['FONTE'] == src]
+    if ind != "SIAPS": view = [r for r in view if r.get('INDICADOR_KEY') == ind]
+    if team != "ALL": view = [r for r in view if str(r['EQUIPE']) == team]
+    if "ALL" not in selected_mas: view = [r for r in view if str(r['MICROAREA']).replace(".0","") in selected_mas]
+        
+    total_pacientes = len(view)
+    total_bolsa = sum(1 for r in view if is_bolsa_familia(r.get('BOLSA_FAMILIA')))
+        
+    if active_filter_stat:
+        if active_filter_stat == "BOLSA_FAMILIA": view = [r for r in view if is_bolsa_familia(r.get('BOLSA_FAMILIA'))]
+        else:
+            char = active_filter_stat[0]
+            if "_OK" in active_filter_stat: view = [r for r in view if r.get(char) == 'X']
+            elif "_PEND" in active_filter_stat: view = [r for r in view if r.get(char) == '-']
+
+    document.getElementById("stat-total").innerText = total_pacientes
+    if document.getElementById("stat-bolsa-val"): document.getElementById("stat-bolsa-val").innerText = total_bolsa
+    
+    ref_dates = list(set(r['DATA_REF'] for r in view if r['DATA_REF']))
+    document.getElementById("stat-dt-ref").innerText = " / ".join(ref_dates) if ref_dates else "-"
+    
+    container = document.getElementById("cards-container")
+    container.innerHTML = ""
+    template = document.getElementById("card-template")
+    
+    logic_key = ind if ind != "SIAPS" else "C2"
+    logic = INDICATOR_LOGIC.get(logic_key, {})
+    
+    for char in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+        if char in logic:
+            clone = template.content.cloneNode(True)
+            card = clone.querySelector(".stats-card")
+            card.classList.remove("hidden")
+            card.querySelector(".label-card").innerText = f"{char} - {logic[char]}"
+            
+            unfiltered_view = [r for r in raw_db if r['FONTE'] == src]
+            if ind != "SIAPS": unfiltered_view = [r for r in unfiltered_view if r.get('INDICADOR_KEY') == ind]
+            if team != "ALL": unfiltered_view = [r for r in unfiltered_view if str(r['EQUIPE']) == team]
+            if "ALL" not in selected_mas: unfiltered_view = [r for r in unfiltered_view if str(r['MICROAREA']).replace(".0","") in selected_mas]
+            
+            ok = sum(1 for r in unfiltered_view if str(r.get(char)) == 'X')
+            na = sum(1 for r in unfiltered_view if str(r.get(char)) == 'N/A')
+            tot = len(unfiltered_view) - na
+            
+            card.querySelector(".stat-ok-val").innerText = ok
+            card.querySelector(".stat-ok-val").onclick = create_proxy(lambda e, c=char: applyStatFilter(f"{c}_OK"))
+            
+            pend_val = (tot - ok) if (tot - ok) >= 0 else 0
+            card.querySelector(".stat-pend-val").innerText = pend_val
+            card.querySelector(".stat-pend-val").onclick = create_proxy(lambda e, c=char: applyStatFilter(f"{c}_PEND"))
+            
+            pct = (ok / tot * 100) if tot > 0 else 0
+            card.querySelector(".bar-ok").style.width = f"{pct}%"
+            card.querySelector(".bar-pend").style.width = f"{100 - pct}%"
+            container.appendChild(clone)
+            
+    view_s = sorted(view, key=lambda x: x.get('ORIGINAL_INDEX', 0))
+    current_view_data = view_s
+    
+    tbody = document.getElementById("table-body")
+    tbody.innerHTML = ""
+    for r in view_s:
+        tr = document.createElement("tr")
+        tr.className = "hover:bg-slate-100 border-b"
+        raw_audit = str(r.get('AUDIT', ''))
+        
+        p_html = "".join([f"<span class='{'text-ok' if '✅' in l else 'text-slate-400' if 'N/A' in l or '➖' in l else 'text-pnd'} block mb-0.5 text-[10px]'>{l.strip()}</span>" for l in raw_audit.split("|")])
+        nome_exib = f'<span class="text-amber-500 font-black text-sm mr-1" title="*">*</span>{r["NOME"]}' if is_bolsa_familia(r.get("BOLSA_FAMILIA")) else r["NOME"]
+        
+        tr.innerHTML = f'<td class="px-4 py-4 text-center border-r font-bold">{r["EQUIPE"]}</td><td class="px-2 py-4 text-center border-r">{str(r["MICROAREA"]).replace(".0","")}</td><td class="px-4 py-4 border-r uppercase"><b>{nome_exib}</b></td><td class="px-4 py-4 border-r text-center">{r["DATA_NASCIMENTO"]}</td><td class="px-4 py-4 border-r text-[9px] font-mono text-center bg-slate-50">{r["CPF"]}</td><td class="px-4 py-4 border-r italic text-slate-500">{r["ENDERECO"]}</td><td class="px-6 py-4 audit-desc" data-raw-audit="{raw_audit}">{p_html}</td>'
+        tbody.appendChild(tr)
+        
+    btn_excel = document.getElementById("btn-excel-export")
+    if btn_excel: btn_excel.disabled = len(view) == 0
+
+def exportExcel():
+    global current_view_data
+    if not current_view_data: return
+        
+    view_for_excel = sorted(current_view_data, key=lambda x: x.get('ORIGINAL_INDEX', 0))
+    
+    export_list = []
+    for v in view_for_excel:
+        clean_v = {k: v.get(k, "") for k in COLUNAS_PADRAO}
+        if is_bolsa_familia(clean_v.get('BOLSA_FAMILIA')) and not str(clean_v['NOME']).startswith('*'): 
+            clean_v['NOME'] = f"* {clean_v['NOME']}"
+        export_list.append(clean_v)
+            
+    df_f = pd.DataFrame(export_list)[COLUNAS_PADRAO]
+    csv = df_f.to_csv(index=False, sep=';', encoding='utf-8-sig')
+    
+    b = Blob.new([csv], {"type":"text/csv"})
+    u = URL.createObjectURL(b)
+    l = document.createElement("a")
+    l.href = u
+    l.download = f"AuditExport_Geral_{datetime.datetime.now().strftime('%d_%m_%Y')}.csv"
+    l.click()
+
+try:
+    window.py_refreshDataView = create_proxy(refresh_data_view)
+    window.py_applyStatFilter = create_proxy(applyStatFilter)
+    window.py_clearFilter = create_proxy(clearFilter)
+    window.py_processFiles = create_proxy(process_files)
+    window.py_exportExcel = create_proxy(exportExcel)
+    document.getElementById("pyscript-loader").classList.add("hidden")
+    addLog("Audit Master Atualizado: Filtros rigorosos de importação aplicados!")
+except Exception as e:
+    document.getElementById("pyscript-loader").classList.add("hidden")
+    addLog(f"ERRO DE INICIALIZAÇÃO: {str(e)}", "text-red-500")
+
+    </script>
+</body>
+</html>
